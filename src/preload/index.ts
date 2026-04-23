@@ -26,5 +26,14 @@ contextBridge.exposeInMainWorld('api', {
 
   getSectionFiles: (sectionPath: string) => ipcRenderer.invoke('fs:get-section-files', sectionPath),
   readFile: (filePath: string) => ipcRenderer.invoke('fs:read-file', filePath),
-  openPath: (filePath: string) => ipcRenderer.invoke('shell:open-path', filePath)
+  openPath: (filePath: string) => ipcRenderer.invoke('shell:open-path', filePath),
+
+  readDirectory: (dirPath: string) => ipcRenderer.invoke('fs:read-directory', dirPath),
+  createFolder: (folderPath: string) => ipcRenderer.invoke('fs:create-folder', folderPath),
+  renameFolder: (params: { oldPath: string; newName: string }) =>
+    ipcRenderer.invoke('fs:rename-folder', params),
+  deleteFolder: (params: { folderPath: string }) =>
+    ipcRenderer.invoke('fs:delete-folder', params),
+  copyFile: (params: { sourcePath: string; destinationFolder: string }) =>
+    ipcRenderer.invoke('fs:copy-file', params)
 })

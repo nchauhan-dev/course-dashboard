@@ -10,6 +10,7 @@ import type {
   Submission,
   CalendarEvent,
   AppConfig,
+  TreeNode,
   CreateCourseParams,
   CreateAssignmentParams,
   SubmitFilesParams,
@@ -530,3 +531,79 @@ ipcMain.handle('fs:read-file', (_e, filePath: string): IpcResult<string> => {
 ipcMain.handle('shell:open-path', (_e, filePath: string): void => {
   shell.openPath(filePath)
 })
+
+function readDirRecursive(dirPath: string, skipName?: string): TreeNode[] {
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+  return entries
+    .filter((e) => !e.name.startsWith('.') && e.name !== skipName)
+    .map((e) => {
+      const fullPath = path.join(dirPath, e.name)
+      if (e.isDirectory()) {
+        return {
+          name: e.name,
+          path: fullPath,
+          isDirectory: true,
+          children: readDirRecursive(fullPath)
+        }
+      }
+      return { name: e.name, path: fullPath, isDirectory: false }
+    })
+}
+
+ipcMain.handle('fs:read-directory', (_e, dirPath: string): IpcResult<TreeNode[]> => {
+  if (!fs.existsSync(dirPath)) return { success: false, error: 'Path does not exist' }
+  try {
+    return { success: true, data: readDirRecursive(dirPath, 'Assignments') }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:create-folder', (_e, folderPath: string): IpcResult<void> => {
+  try {
+    fs.mkdirSync(folderPath, { recursive: true })
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle(
+  'fs:rename-folder',
+  (_e, { oldPath, newName }: { oldPath: string; newName: string }): IpcResult<void> => {
+    try {
+      fs.renameSync(oldPath, path.join(path.dirname(oldPath), newName))
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+)
+
+ipcMain.handle(
+  'fs:delete-folder',
+  (_e, { folderPath }: { folderPath: string }): IpcResult<void> => {
+    try {
+      fs.rmSync(folderPath, { recursive: true, force: true })
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+)
+
+ipcMain.handle(
+  'fs:copy-file',
+  (_e, { sourcePath, destinationFolder }: { sourcePath: string; destinationFolder: string }): IpcResult<void> => {
+    console.log('[main] fs:copy-file — sourcePath:', sourcePath, '| destinationFolder:', destinationFolder)
+    try {
+      const dest = path.join(destinationFolder, path.basename(sourcePath))
+      fs.copyFileSync(sourcePath, dest)
+      console.log('[main] fs:copy-file — success, copied to:', dest)
+      return { success: true }
+    } catch (e) {
+      console.error('[main] fs:copy-file — error:', e)
+      return { success: false, error: String(e) }
+    }
+  }
+)

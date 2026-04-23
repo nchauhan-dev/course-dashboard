@@ -4,6 +4,7 @@ import type {
   Submission,
   CalendarEvent,
   AppConfig,
+  TreeNode,
   CreateCourseParams,
   CreateAssignmentParams,
   SubmitFilesParams,
@@ -46,6 +47,12 @@ declare global {
       getSectionFiles: (sectionPath: string) => Promise<IpcResult<string[]>>
       readFile: (filePath: string) => Promise<IpcResult<string>>
       openPath: (filePath: string) => Promise<void>
+
+      readDirectory: (dirPath: string) => Promise<IpcResult<TreeNode[]>>
+      createFolder: (folderPath: string) => Promise<IpcResult<void>>
+      renameFolder: (params: { oldPath: string; newName: string }) => Promise<IpcResult<void>>
+      deleteFolder: (params: { folderPath: string }) => Promise<IpcResult<void>>
+      copyFile: (params: { sourcePath: string; destinationFolder: string }) => Promise<IpcResult<void>>
     }
   }
 }
@@ -76,5 +83,11 @@ export const api = {
 
   getSectionFiles: (sectionPath: string) => window.api.getSectionFiles(sectionPath),
   readFile: (filePath: string) => window.api.readFile(filePath),
-  openPath: (filePath: string) => window.api.openPath(filePath)
+  openPath: (filePath: string) => window.api.openPath(filePath),
+
+  readDirectory: (dirPath: string) => window.api.readDirectory(dirPath),
+  createFolder: (folderPath: string) => window.api.createFolder(folderPath),
+  renameFolder: (params: { oldPath: string; newName: string }) => window.api.renameFolder(params),
+  deleteFolder: (params: { folderPath: string }) => window.api.deleteFolder(params),
+  copyFile: (params: { sourcePath: string; destinationFolder: string }) => window.api.copyFile(params)
 }

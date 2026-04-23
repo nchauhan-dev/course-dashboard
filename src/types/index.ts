@@ -79,6 +79,13 @@ export interface SubmitFilesParams {
   notes: string
 }
 
+export interface TreeNode {
+  name: string
+  path: string
+  isDirectory: boolean
+  children?: TreeNode[]
+}
+
 export interface IpcResult<T> {
   success: boolean
   data?: T
