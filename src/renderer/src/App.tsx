@@ -4,21 +4,21 @@ import { AppProvider, useApp } from './store/AppContext'
 import { api } from './lib/api'
 import Setup from './pages/Setup'
 import Dashboard from './pages/Dashboard'
-import CourseDetail from './pages/CourseDetail'
+import ProjectDetail from './pages/ProjectDetail'
 import AssignmentDetail from './pages/AssignmentDetail'
 import Archive from './pages/Archive'
-import NewCourseModal from './components/NewCourseModal'
+import NewProjectModal from './components/NewProjectModal'
 import SettingsModal from './components/SettingsModal'
 
 // ── Persistent sidebar ────────────────────────────────────────────────────────
 
 function AppSidebar() {
-  const { courses, rootPath, activeWorkspace, switchWorkspace } = useApp()
+  const { projects, rootPath, activeWorkspace, switchWorkspace, removeProject, refreshProjects } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
 
   const [collapsed, setCollapsed] = useState(false)
-  const [showNewCourse, setShowNewCourse] = useState(false)
+  const [showNewProject, setShowNewProject] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Workspace switcher
@@ -29,6 +29,15 @@ function AppSidebar() {
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
   const [wsBtnHovered, setWsBtnHovered] = useState(false)
   const workspaceMenuRef = useRef<HTMLDivElement>(null)
+
+  // Project context menu
+  const [hoveredProject, setHoveredProject] = useState<string | null>(null)
+  const [openMenuProject, setOpenMenuProject] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
+  const [renamingProject, setRenamingProject] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState<string | null>(null)
+  const projectMenuRef = useRef<HTMLDivElement>(null)
 
   // User name + menu
   const [userName, setUserName] = useState('')
@@ -75,6 +84,41 @@ function AppSidebar() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [userMenuOpen])
 
+  useEffect(() => {
+    if (!openMenuProject) return
+    function handleClick(e: MouseEvent) {
+      if (projectMenuRef.current && !projectMenuRef.current.contains(e.target as Node)) {
+        setOpenMenuProject(null)
+        setConfirmDeleteProject(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [openMenuProject])
+
+  function openProjectMenu(e: React.MouseEvent, projectId: string) {
+    e.stopPropagation()
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setMenuPos({ top: rect.bottom + 4, left: rect.left - 8 })
+    setOpenMenuProject(projectId)
+    setConfirmDeleteProject(null)
+  }
+
+  async function handleRenameProject(projectId: string, oldPath: string, currentName: string) {
+    const newName = renameValue.trim()
+    setRenamingProject(null)
+    if (!newName || newName === currentName) return
+    await api.renameFolder({ oldPath, newName })
+    await refreshProjects()
+  }
+
+  async function handleDeleteProject(projectId: string, projectPath: string) {
+    await api.deleteProject(projectPath)
+    removeProject(projectId)
+    setOpenMenuProject(null)
+    setConfirmDeleteProject(null)
+  }
+
   function openUserMenu() {
     if (!userMenuBtnRef.current) return
     const rect = userMenuBtnRef.current.getBoundingClientRect()
@@ -103,7 +147,7 @@ function AppSidebar() {
 
   const isDashboard = location.pathname === '/dashboard'
   const isArchive = location.pathname === '/archive'
-  const isCourseActive = (id: string) => location.pathname.startsWith(`/course/${id}`)
+  const isProjectActive = (id: string) => location.pathname.startsWith(`/project/${id}`)
 
   return (
     <>
@@ -257,24 +301,57 @@ function AppSidebar() {
                 <span style={{ color: isDashboard ? 'var(--color-ink)' : 'var(--color-ink2)' }}>Dashboard</span>
               </button>
 
-              {courses.length > 0 && (
+              {projects.length > 0 && (
                 <div className="pt-3">
                   <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-mute)', letterSpacing: '0.1em' }}>
-                    Courses
+                    Projects
                   </p>
-                  {courses.map((course) => {
-                    const isActive = isCourseActive(course.id)
+                  {projects.map((project) => {
+                    const isActive = isProjectActive(project.id)
+                    const isHov = hoveredProject === project.id
+                    const isRenaming = renamingProject === project.id
                     return (
-                      <button
-                        key={course.id}
-                        onClick={() => navigate(`/course/${course.id}`)}
+                      <div
+                        key={project.id}
+                        onClick={() => !isRenaming && navigate(`/project/${project.id}`)}
+                        onMouseEnter={() => setHoveredProject(project.id)}
+                        onMouseLeave={() => setHoveredProject(null)}
                         className={`sidebar-item w-full ${isActive ? 'active' : ''}`}
+                        style={{ cursor: 'pointer' }}
                       >
-                        <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: course.color }} />
-                        <span className="flex-1 min-w-0 truncate text-left text-sm" style={{ color: isActive ? 'var(--color-ink)' : 'var(--color-ink2)' }}>
-                          {course.name}
-                        </span>
-                      </button>
+                        <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: project.color }} />
+                        {isRenaming ? (
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={() => handleRenameProject(project.id, project.path, project.name)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameProject(project.id, project.path, project.name)
+                              if (e.key === 'Escape') setRenamingProject(null)
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="sidebar-input flex-1 min-w-0 text-sm"
+                            style={{ color: 'var(--color-ink)' }}
+                          />
+                        ) : (
+                          <span className="flex-1 min-w-0 truncate text-left text-sm" style={{ color: isActive ? 'var(--color-ink)' : 'var(--color-ink2)' }}>
+                            {project.name}
+                          </span>
+                        )}
+                        {isHov && !isRenaming && (
+                          <button
+                            onClick={(e) => openProjectMenu(e, project.id)}
+                            style={{ display: 'flex', padding: 2, borderRadius: 3, color: 'var(--color-mute)', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                              <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
@@ -283,11 +360,11 @@ function AppSidebar() {
 
             {/* Bottom actions */}
             <div className="space-y-0.5 pt-2 no-drag" style={{ borderTop: '1px solid var(--color-border)' }}>
-              <button onClick={() => setShowNewCourse(true)} className="sidebar-item w-full" style={{ color: 'var(--color-ink2)' }}>
+              <button onClick={() => setShowNewProject(true)} className="sidebar-item w-full" style={{ color: 'var(--color-ink2)' }}>
                 <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ color: 'var(--color-mute)' }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                New Course
+                New Project
               </button>
 
               <button onClick={() => navigate('/archive')} className={`sidebar-item w-full ${isArchive ? 'active' : ''}`} style={{ color: isArchive ? 'var(--color-ink)' : 'var(--color-ink2)' }}>
@@ -323,12 +400,66 @@ function AppSidebar() {
       </aside>
 
       {/* Modals */}
-      {showNewCourse && <NewCourseModal onClose={() => setShowNewCourse(false)} />}
+      {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} />}
 
       <SettingsModal
         open={settingsOpen}
         onClose={() => { setSettingsOpen(false); loadUserName() }}
       />
+
+      {openMenuProject && (() => {
+        const project = projects.find((c) => c.id === openMenuProject)
+        if (!project) return null
+        const isConfirming = confirmDeleteProject === project.id
+        return (
+          <div
+            ref={projectMenuRef}
+            className="fixed z-50 rounded-lg py-1"
+            style={{ top: menuPos.top, left: menuPos.left, minWidth: 128, border: '1px solid var(--color-border)', background: 'var(--color-panel)' }}
+          >
+            <button
+              onClick={() => { setRenamingProject(project.id); setRenameValue(project.name); setOpenMenuProject(null) }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"
+              style={{ color: 'var(--color-ink2)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-mute)' }}>
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              Rename
+            </button>
+            {isConfirming ? (
+              <button
+                onClick={() => handleDeleteProject(project.id, project.path)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium"
+                style={{ color: 'var(--color-danger)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-danger-soft)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                </svg>
+                Confirm delete
+              </button>
+            ) : (
+              <button
+                onClick={() => setConfirmDeleteProject(project.id)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"
+                style={{ color: 'var(--color-ink2)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-mute)' }}>
+                  <path d="M3 6h18m-2 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+                Delete
+              </button>
+            )}
+          </div>
+        )
+      })()}
 
       {userMenuOpen && (
         <div
@@ -382,8 +513,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/setup" element={<Setup />} />
       <Route path="/dashboard" element={rootPath ? <Dashboard /> : <Navigate to="/setup" replace />} />
-      <Route path="/course/:courseId" element={rootPath ? <CourseDetail /> : <Navigate to="/setup" replace />} />
-      <Route path="/course/:courseId/assignment/:assignmentId" element={rootPath ? <AssignmentDetail /> : <Navigate to="/setup" replace />} />
+      <Route path="/project/:projectId" element={rootPath ? <ProjectDetail /> : <Navigate to="/setup" replace />} />
+      <Route path="/project/:projectId/assignment/:assignmentId" element={rootPath ? <AssignmentDetail /> : <Navigate to="/setup" replace />} />
       <Route path="/archive" element={rootPath ? <Archive /> : <Navigate to="/setup" replace />} />
       <Route path="*" element={<Navigate to={rootPath ? '/dashboard' : '/setup'} replace />} />
     </Routes>

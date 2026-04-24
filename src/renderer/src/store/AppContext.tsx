@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import type { Course, CalendarEvent } from '../../../../types/index'
+import type { Project, CalendarEvent } from '../../../../types/index'
 import { api } from '../lib/api'
 
 interface AppState {
   rootPath: string | null
   activeWorkspace: string
   userName: string
-  courses: Course[]
+  projects: Project[]
   calendarEvents: CalendarEvent[]
   isLoading: boolean
   error: string | null
@@ -17,10 +17,10 @@ interface AppContextValue extends AppState {
   setRootPath: (path: string) => void
   setActiveWorkspace: (name: string) => void
   switchWorkspace: (name: string) => Promise<void>
-  refreshCourses: () => Promise<void>
+  refreshProjects: () => Promise<void>
   refreshCalendar: () => Promise<void>
-  addCourse: (course: Course) => void
-  removeCourse: (courseId: string) => void
+  addProject: (project: Project) => void
+  removeProject: (projectId: string) => void
   clearError: () => void
 }
 
@@ -31,7 +31,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     rootPath: null,
     activeWorkspace: '',
     userName: '',
-    courses: [],
+    projects: [],
     calendarEvents: [],
     isLoading: true,
     error: null
@@ -43,11 +43,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       : state.rootPath
     : null
 
-  const refreshCourses = useCallback(async () => {
+  const refreshProjects = useCallback(async () => {
     if (!workspacePath) return
-    const result = await api.getCourses(workspacePath)
+    const result = await api.getProjects(workspacePath)
     if (result.success && result.data) {
-      setState((prev) => ({ ...prev, courses: result.data! }))
+      setState((prev) => ({ ...prev, projects: result.data! }))
     }
   }, [workspacePath])
 
@@ -77,14 +77,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, activeWorkspace: name }))
   }, [state.rootPath])
 
-  const addCourse = useCallback((course: Course) => {
-    setState((prev) => ({ ...prev, courses: [...prev.courses, course] }))
+  const addProject = useCallback((project: Project) => {
+    setState((prev) => ({ ...prev, projects: [...prev.projects, project] }))
   }, [])
 
-  const removeCourse = useCallback((courseId: string) => {
+  const removeProject = useCallback((projectId: string) => {
     setState((prev) => ({
       ...prev,
-      courses: prev.courses.filter((c) => c.id !== courseId)
+      projects: prev.projects.filter((c) => c.id !== projectId)
     }))
   }, [])
 
@@ -113,23 +113,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  // Load courses + calendar whenever workspacePath changes
+  // Load projects + calendar whenever workspacePath changes
   useEffect(() => {
     if (!workspacePath) return
     setState((prev) => ({ ...prev, isLoading: true }))
     Promise.all([
-      api.getCourses(workspacePath),
+      api.getProjects(workspacePath),
       api.getCalendarEvents(
         workspacePath,
         new Date().toISOString(),
         (() => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString() })()
       )
-    ]).then(([coursesResult, eventsResult]) => {
+    ]).then(([projectsResult, eventsResult]) => {
       console.log('[AppContext] initial load raw events:', eventsResult.data)
       setState((prev) => ({
         ...prev,
         isLoading: false,
-        courses: coursesResult.success && coursesResult.data ? coursesResult.data : [],
+        projects: projectsResult.success && projectsResult.data ? projectsResult.data : [],
         calendarEvents: eventsResult.success && eventsResult.data ? eventsResult.data : []
       }))
     })
@@ -143,10 +143,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setRootPath,
         setActiveWorkspace,
         switchWorkspace,
-        refreshCourses,
+        refreshProjects,
         refreshCalendar,
-        addCourse,
-        removeCourse,
+        addProject,
+        removeProject,
         clearError
       }}
     >

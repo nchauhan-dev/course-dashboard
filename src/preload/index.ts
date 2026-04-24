@@ -10,12 +10,12 @@ contextBridge.exposeInMainWorld('api', {
   createWorkspace: (rootPath: string, name: string) => ipcRenderer.invoke('fs:create-workspace', rootPath, name),
   switchWorkspace: (rootPath: string, name: string) => ipcRenderer.invoke('fs:switch-workspace', rootPath, name),
 
-  getCourses: (rootPath: string) => ipcRenderer.invoke('fs:get-courses', rootPath),
-  createCourse: (params: unknown) => ipcRenderer.invoke('fs:create-course', params),
-  deleteCourse: (coursePath: string) => ipcRenderer.invoke('fs:delete-course', coursePath),
+  getProjects: (rootPath: string) => ipcRenderer.invoke('fs:get-projects', rootPath),
+  createProject: (params: unknown) => ipcRenderer.invoke('fs:create-project', params),
+  deleteProject: (projectPath: string) => ipcRenderer.invoke('fs:delete-project', projectPath),
 
-  getAssignments: (courseId: string, coursePath: string, courseName: string, courseColor: string) =>
-    ipcRenderer.invoke('fs:get-assignments', courseId, coursePath, courseName, courseColor),
+  getAssignments: (projectId: string, projectPath: string, projectName: string, projectColor: string) =>
+    ipcRenderer.invoke('fs:get-assignments', projectId, projectPath, projectName, projectColor),
   createAssignment: (params: unknown) => ipcRenderer.invoke('fs:create-assignment', params),
 
   submitFiles: (params: unknown) => ipcRenderer.invoke('fs:submit-files', params),

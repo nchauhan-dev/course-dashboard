@@ -5,13 +5,13 @@ import path from 'path'
 import matter from 'gray-matter'
 import { v4 as uuidv4 } from 'uuid'
 import type {
-  Course,
+  Project,
   Assignment,
   Submission,
   CalendarEvent,
   AppConfig,
   TreeNode,
-  CreateCourseParams,
+  CreateProjectParams,
   CreateAssignmentParams,
   SubmitFilesParams,
   IpcResult
@@ -39,6 +39,19 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Run migration before the window loads so data is correct on first render
+  try {
+    const configPath = getConfigPath()
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as AppConfig
+      if (config.rootPath && fs.existsSync(config.rootPath)) {
+        migrateCourseMdFiles(config.rootPath)
+      }
+    }
+  } catch (e) {
+    console.error('[migration] failed to read config:', e)
+  }
+
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -107,13 +120,13 @@ function getSubmissions(assignmentPath: string, assignmentId: string): Submissio
   )
 }
 
-function getAssignmentsForCourse(
-  coursePath: string,
-  courseId: string,
-  courseName: string,
-  courseColor: string
+function getAssignmentsForProject(
+  projectPath: string,
+  projectId: string,
+  projectName: string,
+  projectColor: string
 ): Assignment[] {
-  const assignmentsDir = path.join(coursePath, 'Assignments')
+  const assignmentsDir = path.join(projectPath, 'Assignments')
   if (!fs.existsSync(assignmentsDir)) return []
 
   const assignments: Assignment[] = []
@@ -131,9 +144,9 @@ function getAssignmentsForCourse(
 
     assignments.push({
       id: String(data.id ?? uuidv4()),
-      courseId,
-      courseName,
-      courseColor,
+      projectId,
+      projectName,
+      projectColor,
       name: String(data.name ?? entry.name),
       description: String(data.description ?? ''),
       due_date: String(data.due_date ?? ''),
@@ -148,12 +161,58 @@ function getAssignmentsForCourse(
   return assignments
 }
 
+// ─── One-time migration: course.md → project.md ───────────────────────────────
+
+function migrateCourseMdFiles(rootPath: string): void {
+  if (!fs.existsSync(rootPath)) return
+  let found = false
+
+  // Quick check: does any course.md exist anywhere under rootPath?
+  function hasCoursemd(dir: string): boolean {
+    try {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          if (fs.existsSync(path.join(dir, entry.name, 'course.md'))) return true
+          if (hasCoursemd(path.join(dir, entry.name))) return true
+        }
+      }
+    } catch { /* ignore unreadable dirs */ }
+    return false
+  }
+
+  found = hasCoursemd(rootPath)
+  if (!found) return
+
+  console.log('[migration] course.md → project.md detected, running migration…')
+
+  function migrate(dir: string): void {
+    try {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+        const subDir = path.join(dir, entry.name)
+        const oldMd = path.join(subDir, 'course.md')
+        const newMd = path.join(subDir, 'project.md')
+        if (fs.existsSync(oldMd) && !fs.existsSync(newMd)) {
+          fs.renameSync(oldMd, newMd)
+          console.log(`[migration] renamed: ${oldMd} → ${newMd}`)
+        }
+        migrate(subDir) // recurse into subdirectories
+      }
+    } catch (e) {
+      console.error('[migration] error:', e)
+    }
+  }
+
+  migrate(rootPath)
+  console.log('[migration] complete')
+}
+
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
 
 ipcMain.handle('dialog:select-directory', async (): Promise<IpcResult<string>> => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],
-    message: 'Select your courses vault folder'
+    message: 'Select your projects vault folder'
   })
   if (result.canceled || result.filePaths.length === 0) {
     return { success: false, error: 'Cancelled' }
@@ -260,21 +319,21 @@ ipcMain.handle('fs:switch-workspace', (_e, rootPath: string, name: string): IpcR
   }
 })
 
-ipcMain.handle('fs:get-courses', (_e, rootPath: string): IpcResult<Course[]> => {
+ipcMain.handle('fs:get-projects', (_e, rootPath: string): IpcResult<Project[]> => {
   if (!fs.existsSync(rootPath)) return { success: false, error: 'Root path does not exist' }
   try {
-    const courses: Course[] = []
+    const projects: Project[] = []
 
-    function scanCoursesDir(dir: string) {
+    function scanProjectsDir(dir: string) {
       if (!fs.existsSync(dir)) return
       const entries = fs.readdirSync(dir, { withFileTypes: true })
       for (const entry of entries) {
         if (!entry.isDirectory() || entry.name.startsWith('.')) continue
-        const courseMdPath = path.join(dir, entry.name, 'course.md')
-        if (!fs.existsSync(courseMdPath)) continue
-        const data = parseMd<Record<string, unknown>>(courseMdPath)
+        const projectMdPath = path.join(dir, entry.name, 'project.md')
+        if (!fs.existsSync(projectMdPath)) continue
+        const data = parseMd<Record<string, unknown>>(projectMdPath)
         if (!data) continue
-        courses.push({
+        projects.push({
           id: String(data.id ?? uuidv4()),
           name: String(data.name ?? entry.name),
           description: String(data.description ?? ''),
@@ -286,27 +345,27 @@ ipcMain.handle('fs:get-courses', (_e, rootPath: string): IpcResult<Course[]> => 
       }
     }
 
-    scanCoursesDir(rootPath)
+    scanProjectsDir(rootPath)
 
-    return { success: true, data: courses }
+    return { success: true, data: projects }
   } catch (e) {
     return { success: false, error: String(e) }
   }
 })
 
-ipcMain.handle('fs:create-course', (_e, params: CreateCourseParams): IpcResult<Course> => {
+ipcMain.handle('fs:create-project', (_e, params: CreateProjectParams): IpcResult<Project> => {
   const { rootPath, name, description, color } = params
-  const coursePath = path.join(rootPath, name)
-  if (fs.existsSync(coursePath)) return { success: false, error: 'A course with that name already exists' }
+  const projectPath = path.join(rootPath, name)
+  if (fs.existsSync(projectPath)) return { success: false, error: 'A project with that name already exists' }
 
   try {
-    fs.mkdirSync(coursePath, { recursive: true })
+    fs.mkdirSync(projectPath, { recursive: true })
     for (const section of ['Resources', 'Weekly', 'Assignments']) {
-      fs.mkdirSync(path.join(coursePath, section), { recursive: true })
+      fs.mkdirSync(path.join(projectPath, section), { recursive: true })
     }
 
     const id = uuidv4()
-    writeMd(path.join(coursePath, 'course.md'), {
+    writeMd(path.join(projectPath, 'project.md'), {
       id,
       name,
       description,
@@ -324,7 +383,7 @@ ipcMain.handle('fs:create-course', (_e, params: CreateCourseParams): IpcResult<C
         color,
         created: new Date().toISOString(),
         sections: ['Resources', 'Weekly', 'Assignments'],
-        path: coursePath
+        path: projectPath
       }
     }
   } catch (e) {
@@ -332,10 +391,10 @@ ipcMain.handle('fs:create-course', (_e, params: CreateCourseParams): IpcResult<C
   }
 })
 
-ipcMain.handle('fs:delete-course', (_e, coursePath: string): IpcResult<void> => {
-  if (!fs.existsSync(coursePath)) return { success: false, error: 'Course path not found' }
+ipcMain.handle('fs:delete-project', (_e, projectPath: string): IpcResult<void> => {
+  if (!fs.existsSync(projectPath)) return { success: false, error: 'Project path not found' }
   try {
-    fs.rmSync(coursePath, { recursive: true, force: true })
+    fs.rmSync(projectPath, { recursive: true, force: true })
     return { success: true }
   } catch (e) {
     return { success: false, error: String(e) }
@@ -344,9 +403,9 @@ ipcMain.handle('fs:delete-course', (_e, coursePath: string): IpcResult<void> => 
 
 ipcMain.handle(
   'fs:get-assignments',
-  (_e, courseId: string, coursePath: string, courseName: string, courseColor: string): IpcResult<Assignment[]> => {
+  (_e, projectId: string, projectPath: string, projectName: string, projectColor: string): IpcResult<Assignment[]> => {
     try {
-      const assignments = getAssignmentsForCourse(coursePath, courseId, courseName, courseColor)
+      const assignments = getAssignmentsForProject(projectPath, projectId, projectName, projectColor)
       return { success: true, data: assignments }
     } catch (e) {
       return { success: false, error: String(e) }
@@ -355,8 +414,8 @@ ipcMain.handle(
 )
 
 ipcMain.handle('fs:create-assignment', (_e, params: CreateAssignmentParams): IpcResult<Assignment> => {
-  const { coursePath, courseId, name, description, due_date, points, instructions } = params
-  const assignmentsDir = path.join(coursePath, 'Assignments')
+  const { projectPath, projectId, name, description, due_date, points, instructions } = params
+  const assignmentsDir = path.join(projectPath, 'Assignments')
   fs.mkdirSync(assignmentsDir, { recursive: true })
 
   const assignmentDir = path.join(assignmentsDir, name)
@@ -377,9 +436,9 @@ ipcMain.handle('fs:create-assignment', (_e, params: CreateAssignmentParams): Ipc
       success: true,
       data: {
         id,
-        courseId,
-        courseName: '',
-        courseColor: '',
+        projectId,
+        projectName: '',
+        projectColor: '',
         name,
         description,
         due_date,
@@ -472,17 +531,17 @@ ipcMain.handle(
 
       for (const entry of entries) {
         if (!entry.isDirectory() || entry.name.startsWith('.')) continue
-        const coursePath = path.join(rootPath, entry.name)
-        const courseMdPath = path.join(coursePath, 'course.md')
-        if (!fs.existsSync(courseMdPath)) continue
+        const projectPath = path.join(rootPath, entry.name)
+        const projectMdPath = path.join(projectPath, 'project.md')
+        if (!fs.existsSync(projectMdPath)) continue
 
-        const courseData = parseMd<Record<string, unknown>>(courseMdPath)
-        if (!courseData) continue
-        const courseId = String(courseData.id ?? '')
-        const courseName = String(courseData.name ?? entry.name)
-        const courseColor = String(courseData.color ?? '#6366f1')
+        const projectData = parseMd<Record<string, unknown>>(projectMdPath)
+        if (!projectData) continue
+        const projectId = String(projectData.id ?? '')
+        const projectName = String(projectData.name ?? entry.name)
+        const projectColor = String(projectData.color ?? '#6366f1')
 
-        const assignments = getAssignmentsForCourse(coursePath, courseId, courseName, courseColor)
+        const assignments = getAssignmentsForProject(projectPath, projectId, projectName, projectColor)
         for (const assignment of assignments) {
           if (!assignment.due_date) continue
           const dueDate = new Date(assignment.due_date)
@@ -493,9 +552,9 @@ ipcMain.handle(
               id: assignment.id,
               title: assignment.name,
               due_date: assignment.due_date,
-              courseId,
-              courseName,
-              courseColor,
+              projectId,
+              projectName,
+              projectColor,
               assignmentId: assignment.id,
               type: 'assignment',
               isLate

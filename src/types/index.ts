@@ -1,4 +1,4 @@
-export interface Course {
+export interface Project {
   id: string
   name: string
   description: string
@@ -10,9 +10,9 @@ export interface Course {
 
 export interface Assignment {
   id: string
-  courseId: string
-  courseName: string
-  courseColor: string
+  projectId: string
+  projectName: string
+  projectColor: string
   name: string
   description: string
   due_date: string
@@ -39,9 +39,9 @@ export interface CalendarEvent {
   id: string
   title: string
   due_date: string
-  courseId: string
-  courseName: string
-  courseColor: string
+  projectId: string
+  projectName: string
+  projectColor: string
   assignmentId: string
   type: 'assignment'
   isLate: boolean
@@ -55,7 +55,7 @@ export interface AppConfig {
   userName?: string
 }
 
-export interface CreateCourseParams {
+export interface CreateProjectParams {
   rootPath: string
   name: string
   description: string
@@ -63,8 +63,8 @@ export interface CreateCourseParams {
 }
 
 export interface CreateAssignmentParams {
-  coursePath: string
-  courseId: string
+  projectPath: string
+  projectId: string
   name: string
   description: string
   due_date: string

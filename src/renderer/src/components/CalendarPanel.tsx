@@ -4,7 +4,7 @@ import type { CalendarEvent } from '../../../../types/index'
 
 interface Props {
   events: CalendarEvent[]
-  courseId?: string
+  projectId?: string
 }
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -13,14 +13,14 @@ const MONTHS = [
   'July','August','September','October','November','December'
 ]
 
-export default function CalendarPanel({ events, courseId }: Props) {
+export default function CalendarPanel({ events, projectId }: Props) {
   const navigate = useNavigate()
   const today = useMemo(() => new Date(), [])
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
 
   const filtered = useMemo(
-    () => (courseId ? events.filter((e) => e.courseId === courseId) : events),
-    [events, courseId]
+    () => (projectId ? events.filter((e) => e.projectId === projectId) : events),
+    [events, projectId]
   )
 
   const eventsByDate = useMemo(() => {
@@ -163,13 +163,13 @@ export default function CalendarPanel({ events, courseId }: Props) {
         )}
 
         {grouped.overdue.length > 0 && (
-          <UpcomingGroup label="Overdue" tone="danger" events={grouped.overdue} courseId={courseId} navigate={navigate} />
+          <UpcomingGroup label="Overdue" tone="danger" events={grouped.overdue} projectId={projectId} navigate={navigate} />
         )}
         {grouped.dueToday.length > 0 && (
-          <UpcomingGroup label="Today" tone="today" events={grouped.dueToday} courseId={courseId} navigate={navigate} />
+          <UpcomingGroup label="Today" tone="today" events={grouped.dueToday} projectId={projectId} navigate={navigate} />
         )}
         {grouped.later.length > 0 && (
-          <UpcomingGroup label="Later" tone="mute" events={grouped.later} courseId={courseId} navigate={navigate} />
+          <UpcomingGroup label="Later" tone="mute" events={grouped.later} projectId={projectId} navigate={navigate} />
         )}
       </div>
     </div>
@@ -177,12 +177,12 @@ export default function CalendarPanel({ events, courseId }: Props) {
 }
 
 function UpcomingGroup({
-  label, tone, events, courseId, navigate
+  label, tone, events, projectId, navigate
 }: {
   label: string
   tone: 'danger' | 'today' | 'mute'
   events: CalendarEvent[]
-  courseId?: string
+  projectId?: string
   navigate: ReturnType<typeof useNavigate>
 }) {
   const dotColor = tone === 'danger' ? 'var(--color-danger)' : tone === 'today' ? 'var(--accent)' : 'var(--color-mute)'
@@ -204,7 +204,7 @@ function UpcomingGroup({
           return (
             <button
               key={ev.id}
-              onClick={() => navigate(`/course/${ev.courseId}/assignment/${ev.assignmentId}`)}
+              onClick={() => navigate(`/project/${ev.projectId}/assignment/${ev.assignmentId}`)}
               style={{ display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%' }}
             >
               {/* Check circle */}
@@ -217,10 +217,10 @@ function UpcomingGroup({
                 <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3, color: 'var(--color-ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {ev.title}
                 </div>
-                {!courseId && (
+                {!projectId && (
                   <div style={{ fontSize: 11, color: 'var(--color-mute)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 5, opacity: 0.75 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: ev.courseColor, display: 'inline-block', flexShrink: 0 }} />
-                    <span>{ev.courseName}</span>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: ev.projectColor, display: 'inline-block', flexShrink: 0 }} />
+                    <span>{ev.projectName}</span>
                   </div>
                 )}
                 <div style={{

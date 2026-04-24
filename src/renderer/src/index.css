@@ -85,10 +85,10 @@
     border-color: var(--color-border);
   }
 
-  .course-card {
+  .project-card {
     background: var(--color-panel);
   }
-  .course-card:hover {
+  .project-card:hover {
     background: var(--color-border-s);
   }
 

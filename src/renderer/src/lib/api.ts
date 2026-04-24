@@ -1,11 +1,11 @@
 import type {
-  Course,
+  Project,
   Assignment,
   Submission,
   CalendarEvent,
   AppConfig,
   TreeNode,
-  CreateCourseParams,
+  CreateProjectParams,
   CreateAssignmentParams,
   SubmitFilesParams,
   IpcResult
@@ -23,15 +23,15 @@ declare global {
       createWorkspace: (rootPath: string, name: string) => Promise<IpcResult<void>>
       switchWorkspace: (rootPath: string, name: string) => Promise<IpcResult<void>>
 
-      getCourses: (rootPath: string) => Promise<IpcResult<Course[]>>
-      createCourse: (params: CreateCourseParams) => Promise<IpcResult<Course>>
-      deleteCourse: (coursePath: string) => Promise<IpcResult<void>>
+      getProjects: (rootPath: string) => Promise<IpcResult<Project[]>>
+      createProject: (params: CreateProjectParams) => Promise<IpcResult<Project>>
+      deleteProject: (projectPath: string) => Promise<IpcResult<void>>
 
       getAssignments: (
-        courseId: string,
-        coursePath: string,
-        courseName: string,
-        courseColor: string
+        projectId: string,
+        projectPath: string,
+        projectName: string,
+        projectColor: string
       ) => Promise<IpcResult<Assignment[]>>
       createAssignment: (params: CreateAssignmentParams) => Promise<IpcResult<Assignment>>
 
@@ -69,12 +69,12 @@ export const api = {
   createWorkspace: (rootPath: string, name: string) => window.api.createWorkspace(rootPath, name),
   switchWorkspace: (rootPath: string, name: string) => window.api.switchWorkspace(rootPath, name),
 
-  getCourses: (rootPath: string) => window.api.getCourses(rootPath),
-  createCourse: (params: CreateCourseParams) => window.api.createCourse(params),
-  deleteCourse: (coursePath: string) => window.api.deleteCourse(coursePath),
+  getProjects: (rootPath: string) => window.api.getProjects(rootPath),
+  createProject: (params: CreateProjectParams) => window.api.createProject(params),
+  deleteProject: (projectPath: string) => window.api.deleteProject(projectPath),
 
-  getAssignments: (courseId: string, coursePath: string, courseName: string, courseColor: string) =>
-    window.api.getAssignments(courseId, coursePath, courseName, courseColor),
+  getAssignments: (projectId: string, projectPath: string, projectName: string, projectColor: string) =>
+    window.api.getAssignments(projectId, projectPath, projectName, projectColor),
   createAssignment: (params: CreateAssignmentParams) => window.api.createAssignment(params),
 
   submitFiles: (params: SubmitFilesParams) => window.api.submitFiles(params),

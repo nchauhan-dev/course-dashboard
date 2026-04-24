@@ -56,8 +56,8 @@ export default function Setup() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
           </svg>
         </div>
-        <h1 className="text-3xl font-bold text-gray-900">Course Dashboard</h1>
-        <p className="mt-2 text-gray-500">Your local-first course management workspace</p>
+        <h1 className="text-3xl font-bold text-gray-900">Project Dashboard</h1>
+        <p className="mt-2 text-gray-500">Your local-first project management workspace</p>
       </div>
 
       {step === 'select-folder' ? (
@@ -95,7 +95,7 @@ export default function Setup() {
         <div className="card w-full max-w-md p-8">
           <h2 className="mb-1 text-lg font-semibold text-gray-900">Name your first workspace</h2>
           <p className="mb-6 text-sm text-gray-500">
-            Workspaces let you group courses by semester or year. You can create more later.
+            Workspaces let you group projects by semester or year. You can create more later.
           </p>
           <form onSubmit={handleCreateWorkspace} className="space-y-4">
             <div>

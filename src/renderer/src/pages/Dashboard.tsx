@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/AppContext'
-import CourseCard from '../components/CourseCard'
+import ProjectCard from '../components/ProjectCard'
 import CalendarPanel from '../components/CalendarPanel'
-import NewCourseModal from '../components/NewCourseModal'
+import NewProjectModal from '../components/NewProjectModal'
 
 // Stat helpers
 function todayStr() {
@@ -21,8 +21,8 @@ function formatDateLabel() {
 }
 
 export default function Dashboard() {
-  const { courses, calendarEvents, userName, activeWorkspace } = useApp()
-  const [showNewCourse, setShowNewCourse] = useState(false)
+  const { projects, calendarEvents, userName, activeWorkspace } = useApp()
+  const [showNewProject, setShowNewProject] = useState(false)
 
   const stats = useMemo(() => {
     const today = todayStr()
@@ -69,7 +69,7 @@ export default function Dashboard() {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
             </svg>
-            <span>Search files, tasks, courses…</span>
+            <span>Search files, tasks, projects…</span>
             <span style={{ marginLeft: 'auto', fontFamily: '"Geist Mono", monospace', fontSize: 10, color: 'var(--color-mute)' }}>⌘K</span>
           </div>
 
@@ -132,33 +132,33 @@ export default function Dashboard() {
             </figure>
           </section>
 
-          {/* Courses */}
+          {/* Projects */}
           <section>
             <div className="flex items-baseline gap-3" style={{ marginBottom: 14 }}>
               <h2 style={{
                 fontFamily: '"Geist", system-ui, sans-serif',
                 fontSize: 16, margin: 0, fontWeight: 500, letterSpacing: '-0.02em', color: 'var(--color-ink)',
-              }}>Courses</h2>
-              <span style={{ fontSize: 12, color: 'var(--color-mute)' }}>{courses.length} active</span>
+              }}>Projects</h2>
+              <span style={{ fontSize: 12, color: 'var(--color-mute)' }}>{projects.length} active</span>
             </div>
 
-            {courses.length === 0 ? (
+            {projects.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-center">
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: 'var(--color-panel2)' }}>
                   <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ color: 'var(--color-mute)' }}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
                   </svg>
                 </div>
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-ink)', margin: '0 0 4px' }}>No courses yet</h3>
-                <p style={{ fontSize: 13, color: 'var(--color-mute)', margin: 0 }}>Create your first course to get started.</p>
-                <button onClick={() => setShowNewCourse(true)} className="btn-primary no-drag" style={{ marginTop: 16 }}>
-                  Create a Course
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-ink)', margin: '0 0 4px' }}>No projects yet</h3>
+                <p style={{ fontSize: 13, color: 'var(--color-mute)', margin: 0 }}>Create your first project to get started.</p>
+                <button onClick={() => setShowNewProject(true)} className="btn-primary no-drag" style={{ marginTop: 16 }}>
+                  Create a Project
                 </button>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-                {courses.map((course) => (
-                  <CourseCard key={course.id} course={course} />
+                {projects.map((project) => (
+                  <ProjectCard key={project.id} project={project} />
                 ))}
               </div>
             )}
@@ -182,8 +182,8 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {showNewCourse && (
-        <NewCourseModal onClose={() => setShowNewCourse(false)} />
+      {showNewProject && (
+        <NewProjectModal onClose={() => setShowNewProject(false)} />
       )}
     </div>
   )

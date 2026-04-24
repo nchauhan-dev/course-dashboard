@@ -13,11 +13,11 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
-export default function CourseDetail() {
-  const { courseId } = useParams<{ courseId: string }>()
-  const { courses, calendarEvents, activeWorkspace } = useApp()
+export default function ProjectDetail() {
+  const { projectId } = useParams<{ projectId: string }>()
+  const { projects, calendarEvents, activeWorkspace } = useApp()
 
-  const course = courses.find((c) => c.id === courseId)
+  const project = projects.find((c) => c.id === projectId)
 
   // Assignments
   const [assignments, setAssignments] = useState<Assignment[]>([])
@@ -39,26 +39,26 @@ export default function CourseDetail() {
   const [newTopFolderName, setNewTopFolderName] = useState('')
   const [treeStats, setTreeStats] = useState<{ files: number; bytes: number } | null>(null)
 
-  // Drop-onto-course-root
+  // Drop-onto-project-root
   const [isDragOver, setIsDragOver] = useState(false)
   const dragCounter = useRef(0)
 
   useEffect(() => {
-    if (!course) return
+    if (!project) return
     setIsLoadingAssignments(true)
     api
-      .getAssignments(course.id, course.path, course.name, course.color)
+      .getAssignments(project.id, project.path, project.name, project.color)
       .then((res) => {
         if (res.success && res.data) setAssignments(res.data)
         setIsLoadingAssignments(false)
       })
-  }, [course]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [project]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreateTopFolder(e: React.FormEvent) {
     e.preventDefault()
     const name = newTopFolderName.trim()
-    if (!name || !course) return
-    await api.createFolder(`${course.path}/${name}`)
+    if (!name || !project) return
+    await api.createFolder(`${project.path}/${name}`)
     setCreatingTopFolder(false)
     setNewTopFolderName('')
     setFileTreeKey((k) => k + 1)
@@ -66,13 +66,13 @@ export default function CourseDetail() {
 
   async function handleCreateAssignment(e: React.FormEvent) {
     e.preventDefault()
-    if (!course || !newName.trim() || !newDueDate) return
+    if (!project || !newName.trim() || !newDueDate) return
     setIsCreating(true)
     setCreateError(null)
 
     const result = await api.createAssignment({
-      coursePath: course.path,
-      courseId: course.id,
+      projectPath: project.path,
+      projectId: project.id,
       name: newName.trim(),
       description: newDesc.trim(),
       due_date: new Date(newDueDate).toISOString(),
@@ -88,7 +88,7 @@ export default function CourseDetail() {
 
     setAssignments((prev) => [
       ...prev,
-      { ...result.data!, courseId: course.id, courseName: course.name, courseColor: course.color }
+      { ...result.data!, projectId: project.id, projectName: project.name, projectColor: project.color }
     ])
     setNewName('')
     setNewDesc('')
@@ -98,10 +98,10 @@ export default function CourseDetail() {
     setIsCreating(false)
   }
 
-  if (!course) {
+  if (!project) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p style={{ color: 'var(--color-mute)', fontSize: 14 }}>Course not found.</p>
+        <p style={{ color: 'var(--color-mute)', fontSize: 14 }}>Project not found.</p>
       </div>
     )
   }
@@ -126,14 +126,14 @@ export default function CourseDetail() {
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
             <path d="m9 6 6 6-6 6" />
           </svg>
-          <span>Courses</span>
+          <span>Projects</span>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
             <path d="m9 6 6 6-6 6" />
           </svg>
-          <span className="font-medium" style={{ color: 'var(--color-ink)' }}>{course.name}</span>
+          <span className="font-medium" style={{ color: 'var(--color-ink)' }}>{project.name}</span>
         </div>
         <div style={{ flex: 1 }} />
-        {/* Search — scoped to course.path */}
+        {/* Search — scoped to project.path */}
         <div
           className="no-drag flex items-center gap-2 rounded-md px-2.5 py-1.5"
           style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)', fontSize: 11.5, color: 'var(--color-mute)', minWidth: 200 }}
@@ -188,7 +188,7 @@ export default function CourseDetail() {
             const files = Array.from(e.dataTransfer.files)
             for (const file of files) {
               const src = (file as unknown as { path: string }).path
-              if (src) await api.copyFile({ sourcePath: src, destinationFolder: course.path })
+              if (src) await api.copyFile({ sourcePath: src, destinationFolder: project.path })
             }
             setFileTreeKey((k) => k + 1)
           }}
@@ -220,7 +220,7 @@ export default function CourseDetail() {
 
           <FileTree
             key={fileTreeKey}
-            rootPath={course.path}
+            rootPath={project.path}
             naked
             exclude={['Assignments']}
             onStatsReady={(files, bytes) => setTreeStats({ files, bytes })}
@@ -248,7 +248,7 @@ export default function CourseDetail() {
       <main className="flex flex-1 flex-col overflow-hidden">
 
         {/* Color accent strip */}
-        <div style={{ height: 3, background: course.color, flexShrink: 0 }} />
+        <div style={{ height: 3, background: project.color, flexShrink: 0 }} />
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto" style={{ padding: '24px 28px' }}>
@@ -267,7 +267,7 @@ export default function CourseDetail() {
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-mute)' }}>Upcoming</p>
                   <div className="space-y-2">
                     {upcoming.map((a) => (
-                      <AssignmentRow key={a.id} assignment={a} courseId={course.id} />
+                      <AssignmentRow key={a.id} assignment={a} projectId={project.id} />
                     ))}
                   </div>
                 </div>
@@ -278,7 +278,7 @@ export default function CourseDetail() {
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-mute)' }}>Past</p>
                   <div className="space-y-2">
                     {past.map((a) => (
-                      <AssignmentRow key={a.id} assignment={a} courseId={course.id} />
+                      <AssignmentRow key={a.id} assignment={a} projectId={project.id} />
                     ))}
                   </div>
                 </div>
@@ -317,7 +317,7 @@ export default function CourseDetail() {
           <span className="no-drag" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink)' }}>Calendar</span>
         </div>
         <div className="flex-1 overflow-y-auto no-drag" style={{ padding: '14px 16px' }}>
-          <CalendarPanel events={calendarEvents} courseId={course.id} />
+          <CalendarPanel events={calendarEvents} projectId={project.id} />
         </div>
       </aside>
 
@@ -408,7 +408,7 @@ export default function CourseDetail() {
 
 // ── Assignment row ────────────────────────────────────────────────────────────
 
-function AssignmentRow({ assignment, courseId }: { assignment: Assignment; courseId: string }) {
+function AssignmentRow({ assignment, projectId }: { assignment: Assignment; projectId: string }) {
   const navigate = useNavigate()
   const due = new Date(assignment.due_date)
   const isOverdue = due < new Date()
@@ -417,7 +417,7 @@ function AssignmentRow({ assignment, courseId }: { assignment: Assignment; cours
 
   return (
     <button
-      onClick={() => navigate(`/course/${courseId}/assignment/${assignment.id}`)}
+      onClick={() => navigate(`/project/${projectId}/assignment/${assignment.id}`)}
       className="card w-full p-4 text-left transition-shadow hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-4">

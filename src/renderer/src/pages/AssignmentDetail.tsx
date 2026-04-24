@@ -5,12 +5,12 @@ import { api } from '../lib/api'
 import type { Assignment, Submission } from '../../../../types/index'
 
 export default function AssignmentDetail() {
-  const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>()
-  const { courses, refreshCalendar } = useApp()
+  const { projectId, assignmentId } = useParams<{ projectId: string; assignmentId: string }>()
+  const { projects, refreshCalendar } = useApp()
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const course = courses.find((c) => c.id === courseId)
+  const project = projects.find((c) => c.id === projectId)
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [submitNotes, setSubmitNotes] = useState('')
@@ -20,15 +20,15 @@ export default function AssignmentDetail() {
   const [isDragActive, setIsDragActive] = useState(false)
 
   useEffect(() => {
-    if (!course) return
-    api.getAssignments(course.id, course.path, course.name, course.color).then((res) => {
+    if (!project) return
+    api.getAssignments(project.id, project.path, project.name, project.color).then((res) => {
       if (res.success && res.data) {
         const found = res.data.find((a) => a.id === assignmentId)
         setAssignment(found ?? null)
       }
       setIsLoading(false)
     })
-  }, [course, assignmentId])
+  }, [project, assignmentId])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -72,13 +72,13 @@ export default function AssignmentDetail() {
     )
   }
 
-  if (!course || (!isLoading && !assignment)) {
+  if (!project || (!isLoading && !assignment)) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
           <p className="text-gray-500">Assignment not found.</p>
-          <button className="btn-primary mt-4" onClick={() => navigate(`/course/${courseId}`)}>
-            Back to Course
+          <button className="btn-primary mt-4" onClick={() => navigate(`/project/${projectId}`)}>
+            Back to Project
           </button>
         </div>
       </div>
@@ -117,17 +117,17 @@ export default function AssignmentDetail() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <div className="border-b border-gray-200 px-6 py-4" style={{ borderTopColor: course.color, borderTopWidth: 3 }}>
+        <div className="border-b border-gray-200 px-6 py-4" style={{ borderTopColor: project.color, borderTopWidth: 3 }}>
           <div className="flex items-start justify-between gap-4">
             <div>
               <button
-                onClick={() => navigate(`/course/${courseId}`)}
+                onClick={() => navigate(`/project/${projectId}`)}
                 className="mb-1 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors no-drag"
               >
                 <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
-                {course.name}
+                {project.name}
               </button>
               <h1 className="text-xl font-bold text-gray-900">{assignment.name}</h1>
             </div>

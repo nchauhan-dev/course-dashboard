@@ -13,8 +13,8 @@ interface Props {
   onCreated?: () => void
 }
 
-export default function NewCourseModal({ onClose, onCreated }: Props) {
-  const { workspacePath, addCourse } = useApp()
+export default function NewProjectModal({ onClose, onCreated }: Props) {
+  const { workspacePath, addProject } = useApp()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState(PRESET_COLORS[0])
@@ -28,7 +28,7 @@ export default function NewCourseModal({ onClose, onCreated }: Props) {
     setIsCreating(true)
     setError(null)
 
-    const result = await api.createCourse({
+    const result = await api.createProject({
       rootPath: workspacePath,
       name: name.trim(),
       description: description.trim(),
@@ -36,12 +36,12 @@ export default function NewCourseModal({ onClose, onCreated }: Props) {
     })
 
     if (!result.success || !result.data) {
-      setError(result.error ?? 'Failed to create course')
+      setError(result.error ?? 'Failed to create project')
       setIsCreating(false)
       return
     }
 
-    addCourse(result.data)
+    addProject(result.data)
     onCreated?.()
     onClose()
   }
@@ -50,7 +50,7 @@ export default function NewCourseModal({ onClose, onCreated }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="card w-full max-w-md p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">New Course</h2>
+          <h2 className="text-lg font-semibold text-gray-900">New Project</h2>
           <button
             onClick={onClose}
             className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
@@ -63,7 +63,7 @@ export default function NewCourseModal({ onClose, onCreated }: Props) {
 
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Course name</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Project name</label>
             <input
               type="text"
               value={name}
@@ -107,7 +107,7 @@ export default function NewCourseModal({ onClose, onCreated }: Props) {
           <div className="rounded-lg border border-gray-200 p-3 flex items-center gap-3">
             <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
             <span className="text-sm font-medium text-gray-800 truncate">
-              {name || 'Course name'}
+              {name || 'Project name'}
             </span>
           </div>
 
@@ -127,7 +127,7 @@ export default function NewCourseModal({ onClose, onCreated }: Props) {
               {isCreating ? (
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
-                'Create Course'
+                'Create Project'
               )}
             </button>
           </div>

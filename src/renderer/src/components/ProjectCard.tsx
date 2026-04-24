@@ -1,23 +1,23 @@
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
-import type { Course } from '../../../../types/index'
+import type { Project } from '../../../../types/index'
 
 interface Props {
-  course: Course
+  project: Project
 }
 
-export default function CourseCard({ course }: Props) {
+export default function ProjectCard({ project }: Props) {
   const navigate = useNavigate()
   const { calendarEvents } = useApp()
 
-  const overdue = calendarEvents.filter((e) => e.courseId === course.id && e.isLate).length
-  const upcoming = calendarEvents.filter((e) => e.courseId === course.id && !e.isLate).length
-  const nextTask = calendarEvents.find((e) => e.courseId === course.id && !e.isLate)
+  const overdue = calendarEvents.filter((e) => e.projectId === project.id && e.isLate).length
+  const upcoming = calendarEvents.filter((e) => e.projectId === project.id && !e.isLate).length
+  const nextTask = calendarEvents.find((e) => e.projectId === project.id && !e.isLate)
 
   return (
     <div
-      onClick={() => navigate(`/course/${course.id}`)}
-      className="course-card"
+      onClick={() => navigate(`/project/${project.id}`)}
+      className="project-card"
       style={{
         border: '1px solid var(--color-border)',
         borderRadius: 10,
@@ -31,7 +31,7 @@ export default function CourseCard({ course }: Props) {
       }}
     >
       {/* Left color bar */}
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: course.color }} />
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: project.color }} />
 
       <div style={{ paddingLeft: 8 }}>
         {/* Top row: overdue badge + arrow */}
@@ -55,14 +55,14 @@ export default function CourseCard({ course }: Props) {
         </div>
 
         {/* Name */}
-        <div style={{ fontSize: 15, fontWeight: 500, letterSpacing: '-0.01em', color: 'var(--color-ink)', marginBottom: 3 }}>{course.name}</div>
+        <div style={{ fontSize: 15, fontWeight: 500, letterSpacing: '-0.01em', color: 'var(--color-ink)', marginBottom: 3 }}>{project.name}</div>
 
         {/* Next task or description */}
         <div style={{ fontSize: 12, color: 'var(--color-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {nextTask
             ? <><span style={{ color: 'var(--color-ink2)' }}>Next: </span>{nextTask.title}</>
-            : course.description
-              ? course.description
+            : project.description
+              ? project.description
               : <span style={{ fontStyle: 'italic' }}>No upcoming tasks</span>
           }
         </div>
@@ -72,7 +72,7 @@ export default function CourseCard({ course }: Props) {
           className="flex items-center justify-between"
           style={{ marginTop: 12, fontSize: 11, color: 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}
         >
-          <span>{course.sections.length} {course.sections.length === 1 ? 'section' : 'sections'}</span>
+          <span>{project.sections.length} {project.sections.length === 1 ? 'section' : 'sections'}</span>
           {upcoming > 0 && (
             <span style={{ color: 'var(--accent)', fontWeight: 500, fontFamily: '"Geist", sans-serif' }}>
               {upcoming} upcoming
