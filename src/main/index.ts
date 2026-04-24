@@ -176,23 +176,27 @@ ipcMain.handle('app:load-config', (): IpcResult<AppConfig> => {
   }
 })
 
-ipcMain.handle('app:save-config', (_e, rootPath: string, activeWorkspace: string, accentColor?: string): IpcResult<void> => {
+ipcMain.handle('app:save-config', (_e, rootPath: string, activeWorkspace: string, accentColor?: string, userName?: string): IpcResult<void> => {
   try {
     const configPath = getConfigPath()
     let created = new Date().toISOString()
     let existingAccent: string | undefined
+    let existingUserName: string | undefined
     try {
       const existing = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as AppConfig
       created = existing.created || created
       existingAccent = existing.accentColor
+      existingUserName = existing.userName
     } catch { /* no existing config yet */ }
     const config: AppConfig = {
       rootPath,
       activeWorkspace,
       created,
-      accentColor: accentColor ?? existingAccent
+      accentColor: accentColor ?? existingAccent,
+      userName: userName ?? existingUserName
     }
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+    ensureArchiveFolder(rootPath)
     return { success: true }
   } catch (e) {
     return { success: false, error: String(e) }
@@ -222,6 +226,7 @@ ipcMain.handle('fs:get-workspaces', (_e, rootPath: string): IpcResult<string[]> 
     const workspaces = entries
       .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
       .map((e) => e.name)
+    ensureArchiveFolder(rootPath)
     return { success: true, data: workspaces }
   } catch (e) {
     return { success: false, error: String(e) }
@@ -248,6 +253,7 @@ ipcMain.handle('fs:switch-workspace', (_e, rootPath: string, name: string): IpcR
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as AppConfig
     config.activeWorkspace = name
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+    ensureArchiveFolder(rootPath)
     return { success: true }
   } catch (e) {
     return { success: false, error: String(e) }
@@ -480,8 +486,9 @@ ipcMain.handle(
         for (const assignment of assignments) {
           if (!assignment.due_date) continue
           const dueDate = new Date(assignment.due_date)
-          if (dueDate >= start && dueDate <= end) {
-            const isLate = assignment.submissions.some((s) => s.is_late)
+          // Include if within the requested window OR if overdue with no submission
+          const isLate = assignment.submissions.length === 0 && dueDate < new Date()
+          if (dueDate >= start && dueDate <= end || isLate) {
             events.push({
               id: assignment.id,
               title: assignment.name,
@@ -532,6 +539,10 @@ ipcMain.handle('shell:open-path', (_e, filePath: string): void => {
   shell.openPath(filePath)
 })
 
+function ensureArchiveFolder(rootPath: string): void {
+  fs.mkdirSync(path.join(rootPath, '_Archive'), { recursive: true })
+}
+
 function readDirRecursive(dirPath: string, skipName?: string): TreeNode[] {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true })
   return entries
@@ -546,7 +557,8 @@ function readDirRecursive(dirPath: string, skipName?: string): TreeNode[] {
           children: readDirRecursive(fullPath)
         }
       }
-      return { name: e.name, path: fullPath, isDirectory: false }
+      const size = (() => { try { return fs.statSync(fullPath).size } catch { return 0 } })()
+      return { name: e.name, path: fullPath, isDirectory: false, size }
     })
 }
 
@@ -584,7 +596,75 @@ ipcMain.handle(
   'fs:delete-folder',
   (_e, { folderPath }: { folderPath: string }): IpcResult<void> => {
     try {
-      fs.rmSync(folderPath, { recursive: true, force: true })
+      const configPath = getConfigPath()
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as AppConfig
+      const archiveDir = path.join(config.rootPath, '_Archive')
+      fs.mkdirSync(archiveDir, { recursive: true })
+
+      const originalName = path.basename(folderPath)
+      const ext = path.extname(originalName)
+      const base = ext ? originalName.slice(0, -ext.length) : originalName
+      const encoded = Buffer.from(folderPath).toString('base64')
+      const archivedName = ext
+        ? `${base}_${Date.now()}_${encoded}${ext}`
+        : `${originalName}_${Date.now()}_${encoded}`
+
+      fs.renameSync(folderPath, path.join(archiveDir, archivedName))
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+)
+
+ipcMain.handle(
+  'fs:restore-archive-item',
+  (_e, { itemPath, rootPath }: { itemPath: string; rootPath: string }): IpcResult<void> => {
+    try {
+      const archivedName = path.basename(itemPath)
+      const ext = path.extname(archivedName)
+      // Strip extension to work on the stem, e.g. "report_1714000000000_<b64>"
+      const stem = ext ? archivedName.slice(0, -ext.length) : archivedName
+
+      // Format: originalBase_timestamp_base64
+      const threePartMatch = stem.match(/^(.+)_(\d{13})_([A-Za-z0-9+/=]+)$/)
+      if (!threePartMatch) {
+        return { success: false, error: 'Archived name format not recognised' }
+      }
+      const originalBase = threePartMatch[1]
+      const originalName = originalBase + ext
+      const encoded = threePartMatch[3]
+      const originalPath = Buffer.from(encoded, 'base64').toString('utf8')
+      // originalPath is the full path the item was deleted from — use its directory
+      const originalDir = path.dirname(originalPath)
+
+      // If the original directory still exists, restore there; otherwise fall back
+      // to the first workspace folder under rootPath
+      let destDir: string
+      if (fs.existsSync(originalDir)) {
+        destDir = originalDir
+      } else {
+        const entries = fs.readdirSync(rootPath, { withFileTypes: true })
+        const firstWorkspace = entries.find(
+          (e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== '_Archive'
+        )
+        destDir = firstWorkspace ? path.join(rootPath, firstWorkspace.name) : rootPath
+      }
+
+      const destPath = path.join(destDir, originalName)
+      fs.renameSync(itemPath, destPath)
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+)
+
+ipcMain.handle(
+  'fs:delete-permanent',
+  (_e, { itemPath }: { itemPath: string }): IpcResult<void> => {
+    try {
+      fs.rmSync(itemPath, { recursive: true, force: true })
       return { success: true }
     } catch (e) {
       return { success: false, error: String(e) }

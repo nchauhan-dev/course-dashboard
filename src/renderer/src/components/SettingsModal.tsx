@@ -23,24 +23,37 @@ export default function SettingsModal({ open, onClose }: Props) {
   const { rootPath, activeWorkspace, setRootPath } = useApp()
   const [selectedColor, setSelectedColor] = useState('#4F46E5')
   const [isChangingVault, setIsChangingVault] = useState(false)
+  const [userName, setUserName] = useState('')
 
-  // Sync selected color from CSS variable whenever modal opens
+  // Sync color + name from config whenever modal opens
   useEffect(() => {
-    if (open) {
-      const current = getComputedStyle(document.documentElement)
-        .getPropertyValue('--accent')
-        .trim()
-      setSelectedColor(current || '#4F46E5')
-    }
+    if (!open) return
+    const current = getComputedStyle(document.documentElement)
+      .getPropertyValue('--accent')
+      .trim()
+    setSelectedColor(current || '#4F46E5')
+    api.loadConfig().then((res) => {
+      if (res.success && res.data?.userName) {
+        setUserName(res.data.userName)
+      }
+    })
   }, [open])
 
   if (!open) return null
+
+  function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const name = e.target.value
+    setUserName(name)
+    if (rootPath) {
+      api.saveConfig(rootPath, activeWorkspace, selectedColor, name)
+    }
+  }
 
   function handlePickColor(hex: string) {
     setSelectedColor(hex)
     document.documentElement.style.setProperty('--accent', hex)
     if (rootPath) {
-      api.saveConfig(rootPath, activeWorkspace, hex)
+      api.saveConfig(rootPath, activeWorkspace, hex, userName)
     }
   }
 
@@ -74,6 +87,19 @@ export default function SettingsModal({ open, onClose }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+        </div>
+
+        {/* Name */}
+        <div className="mb-6">
+          <h3 className="mb-3 text-sm font-semibold text-gray-700">Name</h3>
+          <input
+            type="text"
+            value={userName}
+            onChange={handleNameChange}
+            placeholder="Your name"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-transparent focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
+          />
         </div>
 
         {/* Accent Color */}

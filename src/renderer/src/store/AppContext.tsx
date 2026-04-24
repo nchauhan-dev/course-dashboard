@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 interface AppState {
   rootPath: string | null
   activeWorkspace: string
+  userName: string
   courses: Course[]
   calendarEvents: CalendarEvent[]
   isLoading: boolean
@@ -29,6 +30,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>({
     rootPath: null,
     activeWorkspace: '',
+    userName: '',
     courses: [],
     calendarEvents: [],
     isLoading: true,
@@ -55,6 +57,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const end = new Date()
     end.setDate(end.getDate() + 60)
     const result = await api.getCalendarEvents(workspacePath, start.toISOString(), end.toISOString())
+    console.log('[AppContext] refreshCalendar raw result:', result.data)
     if (result.success && result.data) {
       setState((prev) => ({ ...prev, calendarEvents: result.data! }))
     }
@@ -101,6 +104,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           rootPath: config.rootPath,
           activeWorkspace: config.activeWorkspace ?? '',
+          userName: config.userName ?? '',
           isLoading: false
         }))
       } else {
@@ -121,6 +125,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         (() => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString() })()
       )
     ]).then(([coursesResult, eventsResult]) => {
+      console.log('[AppContext] initial load raw events:', eventsResult.data)
       setState((prev) => ({
         ...prev,
         isLoading: false,

@@ -4,18 +4,46 @@ import type { TreeNode } from '../../../../types/index'
 
 interface Props {
   rootPath: string
+  naked?: boolean       // strip border/bg wrapper — use inside a sidebar
+  exclude?: string[]    // folder/file names to hide at the root level
+  onStatsReady?: (files: number, bytes: number) => void
 }
 
-export default function FileTree({ rootPath }: Props) {
+function countStats(nodes: TreeNode[]): { files: number; bytes: number } {
+  let files = 0
+  let bytes = 0
+  for (const n of nodes) {
+    if (n.isDirectory) {
+      const sub = countStats(n.children ?? [])
+      files += sub.files
+      bytes += sub.bytes
+    } else {
+      files += 1
+      bytes += n.size ?? 0
+    }
+  }
+  return { files, bytes }
+}
+
+export default function FileTree({ rootPath, naked, exclude, onStatsReady }: Props) {
   const [nodes, setNodes] = useState<TreeNode[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const load = useCallback(async () => {
     setIsLoading(true)
     const res = await api.readDirectory(rootPath)
-    if (res.success && res.data) setNodes(res.data)
+    if (res.success && res.data) {
+      const filtered = exclude?.length
+        ? res.data.filter((n) => !exclude.includes(n.name))
+        : res.data
+      setNodes(filtered)
+      if (onStatsReady) {
+        const { files, bytes } = countStats(filtered)
+        onStatsReady(files, bytes)
+      }
+    }
     setIsLoading(false)
-  }, [rootPath])
+  }, [rootPath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
 
@@ -31,14 +59,14 @@ export default function FileTree({ rootPath }: Props) {
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white overflow-x-hidden">
+    <div className={naked ? 'overflow-x-hidden' : 'rounded-lg border border-gray-200 bg-white overflow-x-hidden'}>
       {nodes.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-gray-400">
-          No files yet. Drop files onto folders to add them.
+        <p className="px-4 py-6 text-sm" style={{ color: 'var(--color-mute)' }}>
+          No files yet. Drop files here to add them.
         </p>
       ) : (
         nodes.map((node) => (
-          <TreeNodeRow key={node.path} node={node} depth={0} onRefresh={load} />
+          <TreeNodeRow key={node.path} node={node} depth={0} onRefresh={load} naked={naked} />
         ))
       )}
     </div>
@@ -48,11 +76,13 @@ export default function FileTree({ rootPath }: Props) {
 function TreeNodeRow({
   node,
   depth,
-  onRefresh
+  onRefresh,
+  naked
 }: {
   node: TreeNode
   depth: number
   onRefresh: () => void
+  naked?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
@@ -99,7 +129,9 @@ function TreeNodeRow({
     e.preventDefault()
     const name = newFolderName.trim()
     if (!name) return
-    await api.createFolder(`${node.path}/${name}`)
+    const fullPath = `${node.path}/${name}`
+    console.log('[FileTree] handleCreateFolder — creating:', fullPath)
+    await api.createFolder(fullPath)
     setCreating(false)
     setNewFolderName('')
     setExpanded(true)
@@ -191,10 +223,10 @@ function TreeNodeRow({
     ? { onDragEnter: handleDragEnter, onDragLeave: handleDragLeave, onDragOver: handleDragOver, onDrop: handleDrop }
     : {}
 
-  let rowBg = isHovered ? 'bg-gray-50' : 'bg-white'
+  let rowBg = isHovered ? (naked ? 'bg-[var(--color-border-s)]' : 'bg-gray-50') : (naked ? '' : 'bg-white')
   if (node.isDirectory) {
     if (dropSuccess) rowBg = 'bg-green-50'
-    else if (isDragOver) rowBg = 'bg-amber-50'
+    else if (isDragOver) rowBg = naked ? 'bg-[color-mix(in_oklch,var(--accent)_8%,transparent)]' : 'bg-amber-50'
   }
 
   // ── Rename mode ──────────────────────────────────────────────────────────────
@@ -229,7 +261,7 @@ function TreeNodeRow({
         {node.isDirectory && expanded && (
           <div>
             {(node.children ?? []).map((child) => (
-              <TreeNodeRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} />
+              <TreeNodeRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked} />
             ))}
           </div>
         )}
@@ -273,7 +305,7 @@ function TreeNodeRow({
         {node.isDirectory && expanded && (
           <div>
             {(node.children ?? []).map((child) => (
-              <TreeNodeRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} />
+              <TreeNodeRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked} />
             ))}
           </div>
         )}
@@ -285,8 +317,8 @@ function TreeNodeRow({
     <div>
       {/* Row */}
       <div
-        className={`flex items-center gap-2 border-b border-gray-100 pr-3 transition-colors ${rowBg}`}
-        style={{ height: 40, paddingLeft: `${indent}px` }}
+        className={`flex items-center gap-2 pr-3 transition-colors ${rowBg} ${naked ? '' : 'border-b border-gray-100'}`}
+        style={{ height: 36, paddingLeft: `${indent}px` }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         {...dragHandlers}
@@ -320,13 +352,18 @@ function TreeNodeRow({
               onClick={() => setExpanded(!expanded)}
               className="flex-1 min-w-0 text-left"
             >
-              <span className="truncate text-sm font-medium text-gray-800">{node.name}</span>
+              <span className="truncate text-sm text-gray-700">{node.name}</span>
             </button>
 
             {(isHovered || menuOpen) && (
-              <div className="flex flex-shrink-0 items-center gap-0.5">
+              <div
+                className="flex flex-shrink-0 items-center gap-0.5"
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={(e) => { e.stopPropagation() }}
+              >
                 <button
-                  onClick={(e) => { e.stopPropagation(); setCreating(true); setExpanded(true) }}
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); console.log('[FileTree] + clicked, node.path:', node.path); setCreating(true); setExpanded(true) }}
                   className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                   title="New subfolder"
                 >
@@ -460,7 +497,7 @@ function TreeNodeRow({
             </div>
           )}
           {(node.children ?? []).map((child) => (
-            <TreeNodeRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} />
+            <TreeNodeRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked} />
           ))}
         </div>
       )}

@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('api', {
   selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
   loadConfig: () => ipcRenderer.invoke('app:load-config'),
-  saveConfig: (rootPath: string, activeWorkspace: string, accentColor?: string) => ipcRenderer.invoke('app:save-config', rootPath, activeWorkspace, accentColor),
+  saveConfig: (rootPath: string, activeWorkspace: string, accentColor?: string, userName?: string) => ipcRenderer.invoke('app:save-config', rootPath, activeWorkspace, accentColor, userName),
   findExistingConfig: () => ipcRenderer.invoke('app:find-existing-config'),
 
   getWorkspaces: (rootPath: string) => ipcRenderer.invoke('fs:get-workspaces', rootPath),
@@ -35,5 +35,9 @@ contextBridge.exposeInMainWorld('api', {
   deleteFolder: (params: { folderPath: string }) =>
     ipcRenderer.invoke('fs:delete-folder', params),
   copyFile: (params: { sourcePath: string; destinationFolder: string }) =>
-    ipcRenderer.invoke('fs:copy-file', params)
+    ipcRenderer.invoke('fs:copy-file', params),
+  restoreArchiveItem: (params: { itemPath: string; rootPath: string }) =>
+    ipcRenderer.invoke('fs:restore-archive-item', params),
+  deletePermanent: (params: { itemPath: string }) =>
+    ipcRenderer.invoke('fs:delete-permanent', params)
 })

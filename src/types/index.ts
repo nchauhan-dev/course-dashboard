@@ -52,6 +52,7 @@ export interface AppConfig {
   created: string
   activeWorkspace: string
   accentColor?: string
+  userName?: string
 }
 
 export interface CreateCourseParams {
@@ -83,6 +84,7 @@ export interface TreeNode {
   name: string
   path: string
   isDirectory: boolean
+  size?: number           // bytes — only set for files
   children?: TreeNode[]
 }
 

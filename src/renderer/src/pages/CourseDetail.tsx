@@ -4,34 +4,44 @@ import { useApp } from '../store/AppContext'
 import { api } from '../lib/api'
 import CalendarPanel from '../components/CalendarPanel'
 import FileTree from '../components/FileTree'
-import type { Assignment, TreeNode } from '../../../../types/index'
+import type { Assignment } from '../../../../types/index'
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
 
 export default function CourseDetail() {
   const { courseId } = useParams<{ courseId: string }>()
-  const { courses, calendarEvents } = useApp()
-  const navigate = useNavigate()
+  const { courses, calendarEvents, activeWorkspace } = useApp()
 
   const course = courses.find((c) => c.id === courseId)
 
+  // Assignments
   const [assignments, setAssignments] = useState<Assignment[]>([])
-  const [activeTab, setActiveTab] = useState<'assignments' | 'folder'>('assignments')
-  const [topLevelFolders, setTopLevelFolders] = useState<TreeNode[]>([])
-  const [selectedFolder, setSelectedFolder] = useState<TreeNode | null>(null)
-  const [creatingTopFolder, setCreatingTopFolder] = useState(false)
-  const [newTopFolderName, setNewTopFolderName] = useState('')
-  const [creatingSubfolder, setCreatingSubfolder] = useState(false)
-  const [newSubfolderName, setNewSubfolderName] = useState('')
-  const [fileTreeKey, setFileTreeKey] = useState(0)
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false)
   const [showNewAssignment, setShowNewAssignment] = useState(false)
 
-  // New assignment form state
+  // New assignment form
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [newDueDate, setNewDueDate] = useState('')
   const [newPoints, setNewPoints] = useState('100')
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+
+  // File tree sidebar
+  const [fileTreeKey, setFileTreeKey] = useState(0)
+  const [fileSearch, setFileSearch] = useState('')
+  const [creatingTopFolder, setCreatingTopFolder] = useState(false)
+  const [newTopFolderName, setNewTopFolderName] = useState('')
+  const [treeStats, setTreeStats] = useState<{ files: number; bytes: number } | null>(null)
+
+  // Drop-onto-course-root
+  const [isDragOver, setIsDragOver] = useState(false)
+  const dragCounter = useRef(0)
 
   useEffect(() => {
     if (!course) return
@@ -42,45 +52,7 @@ export default function CourseDetail() {
         if (res.success && res.data) setAssignments(res.data)
         setIsLoadingAssignments(false)
       })
-    api.readDirectory(course.path).then((res) => {
-      if (res.success && res.data) {
-        const dirs = res.data.filter((n) => n.isDirectory)
-        setTopLevelFolders(dirs)
-        if (dirs.length > 0) {
-          setSelectedFolder(dirs[0])
-          setActiveTab('folder')
-        }
-      }
-    })
-  }, [course])
-
-  async function reloadTopLevelFolders(selectName?: string) {
-    if (!course) return
-    const res = await api.readDirectory(course.path)
-    if (!res.success || !res.data) return
-    const dirs = res.data.filter((n) => n.isDirectory)
-    setTopLevelFolders(dirs)
-    if (selectName) {
-      const target = dirs.find((d) => d.name === selectName)
-      if (target) { setSelectedFolder(target); setActiveTab('folder') }
-    } else if (dirs.length > 0) {
-      setSelectedFolder(dirs[0])
-      setActiveTab('folder')
-    } else {
-      setSelectedFolder(null)
-      setActiveTab('assignments')
-    }
-  }
-
-  async function handleCreateSubfolder(e: React.FormEvent) {
-    e.preventDefault()
-    const name = newSubfolderName.trim()
-    if (!name || !selectedFolder) return
-    await api.createFolder(`${selectedFolder.path}/${name}`)
-    setCreatingSubfolder(false)
-    setNewSubfolderName('')
-    setFileTreeKey((k) => k + 1)
-  }
+  }, [course]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreateTopFolder(e: React.FormEvent) {
     e.preventDefault()
@@ -89,7 +61,7 @@ export default function CourseDetail() {
     await api.createFolder(`${course.path}/${name}`)
     setCreatingTopFolder(false)
     setNewTopFolderName('')
-    reloadTopLevelFolders(name)
+    setFileTreeKey((k) => k + 1)
   }
 
   async function handleCreateAssignment(e: React.FormEvent) {
@@ -129,12 +101,7 @@ export default function CourseDetail() {
   if (!course) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-500">Course not found.</p>
-          <button className="btn-primary mt-4" onClick={() => navigate('/dashboard')}>
-            Back to Dashboard
-          </button>
-        </div>
+        <p style={{ color: 'var(--color-mute)', fontSize: 14 }}>Course not found.</p>
       </div>
     )
   }
@@ -144,265 +111,282 @@ export default function CourseDetail() {
   const past = assignments.filter((a) => a.due_date && new Date(a.due_date) < now)
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left Sidebar */}
-      <aside className="flex w-56 flex-shrink-0 flex-col border-r border-gray-200 bg-gray-50 overflow-hidden">
-        <div className="drag-region h-8 flex-shrink-0" />
-        <div className="flex flex-col flex-1 overflow-hidden px-3 pb-4">
+    <div className="flex w-full overflow-hidden" style={{ background: 'var(--color-bg)' }}>
+
+      {/* ── Left portion: header + columns ───────────────────────────────────── */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+
+      {/* ── Unified header ───────────────────────────────────────────────────── */}
+      <header
+        className="drag-region flex flex-shrink-0 items-center gap-2.5 px-5"
+        style={{ height: 44, borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+      >
+        <div className="flex items-center gap-1.5 no-drag" style={{ fontSize: 12, color: 'var(--color-mute)' }}>
+          <span>{activeWorkspace || 'Workspace'}</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+          <span>Courses</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+          <span className="font-medium" style={{ color: 'var(--color-ink)' }}>{course.name}</span>
+        </div>
+        <div style={{ flex: 1 }} />
+        {/* Search — scoped to course.path */}
+        <div
+          className="no-drag flex items-center gap-2 rounded-md px-2.5 py-1.5"
+          style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)', fontSize: 11.5, color: 'var(--color-mute)', minWidth: 200 }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+          </svg>
+          <span>Search files, tasks…</span>
+          <span style={{ marginLeft: 'auto', fontFamily: '"Geist Mono", monospace', fontSize: 10, color: 'var(--color-mute)' }}>⌘K</span>
+        </div>
+      </header>
+
+      {/* ── Columns ───────────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+
+      {/* ── Secondary sidebar: File tree ─────────────────────────────────────── */}
+      <aside
+        className="flex flex-col flex-shrink-0 overflow-hidden"
+        style={{ width: 264, borderRight: '1px solid var(--color-border)', background: 'var(--color-sidebar)' }}
+      >
+        {/* FILES header + new folder button */}
+        <div
+          className="flex flex-shrink-0 items-center justify-between px-4 no-drag"
+          style={{ height: 34, borderBottom: '1px solid var(--color-border-s)' }}
+        >
+          <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-mute)' }}>
+            Files
+          </span>
           <button
-            onClick={() => navigate('/dashboard')}
-            className="sidebar-item mb-3 w-full no-drag"
+            onClick={() => { setCreatingTopFolder(true); setNewTopFolderName('') }}
+            style={{ display: 'flex', padding: 3, borderRadius: 4, color: 'var(--color-mute)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            title="New folder"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14M5 12h14" />
             </svg>
-            Dashboard
           </button>
+        </div>
 
-          <div className="mb-3 flex items-center gap-2 px-1">
-            <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: course.color }} />
-            <span className="text-sm font-semibold text-gray-800 truncate">{course.name}</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto no-drag">
-            <button
-              onClick={() => setActiveTab('assignments')}
-              className={`sidebar-item w-full ${activeTab === 'assignments' ? 'active' : ''}`}
+        {/* File tree */}
+        <div
+          className="flex-1 overflow-y-auto overflow-x-hidden no-drag py-1"
+          onDragEnter={(e) => { e.preventDefault(); dragCounter.current++; setIsDragOver(true) }}
+          onDragLeave={() => { dragCounter.current--; if (dragCounter.current === 0) setIsDragOver(false) }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={async (e) => {
+            e.preventDefault()
+            dragCounter.current = 0
+            setIsDragOver(false)
+            const files = Array.from(e.dataTransfer.files)
+            for (const file of files) {
+              const src = (file as unknown as { path: string }).path
+              if (src) await api.copyFile({ sourcePath: src, destinationFolder: course.path })
+            }
+            setFileTreeKey((k) => k + 1)
+          }}
+          style={isDragOver ? { background: 'color-mix(in oklch, var(--accent) 6%, transparent)' } : undefined}
+        >
+          {/* Inline new top-level folder input */}
+          {creatingTopFolder && (
+            <form
+              onSubmit={handleCreateTopFolder}
+              className="flex items-center gap-2 px-3"
+              style={{ height: 36 }}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: '#d97706' }}>
+                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
               </svg>
-              Assignments
-            </button>
-
-            <div className="my-8 border-t border-gray-300" />
-
-            {topLevelFolders.map((folder) => (
-              <FolderSidebarItem
-                key={folder.path}
-                folder={folder}
-                isActive={activeTab === 'folder' && selectedFolder?.path === folder.path}
-                onSelect={(f) => { setSelectedFolder(f); setActiveTab('folder') }}
-                onReload={reloadTopLevelFolders}
+              <input
+                autoFocus
+                type="text"
+                value={newTopFolderName}
+                onChange={(e) => setNewTopFolderName(e.target.value)}
+                onBlur={() => { setCreatingTopFolder(false); setNewTopFolderName('') }}
+                onKeyDown={(e) => { if (e.key === 'Escape') { setCreatingTopFolder(false); setNewTopFolderName('') } }}
+                className="sidebar-input flex-1 min-w-0 p-0 text-sm"
+                style={{ color: 'var(--color-ink2)' }}
+                placeholder="Folder name"
               />
-            ))}
+            </form>
+          )}
 
-            {creatingTopFolder ? (
-              <form
-                onSubmit={handleCreateTopFolder}
-                className="flex items-center gap-2 px-2 py-1"
-              >
-                <svg className="h-4 w-4 flex-shrink-0 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-                </svg>
-                <input
-                  autoFocus
-                  type="text"
-                  value={newTopFolderName}
-                  onChange={(e) => setNewTopFolderName(e.target.value)}
-                  onBlur={() => { setCreatingTopFolder(false); setNewTopFolderName('') }}
-                  onKeyDown={(e) => { if (e.key === 'Escape') { setCreatingTopFolder(false); setNewTopFolderName('') } }}
-                  className="flex-1 min-w-0 rounded border border-gray-300 px-2 py-0.5 text-xs"
-                  placeholder="Folder name"
-                />
-              </form>
-            ) : (
-              <button
-                onClick={() => setCreatingTopFolder(true)}
-                className="sidebar-item w-full text-gray-400"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                New Folder
-              </button>
-            )}
-          </div>
+          <FileTree
+            key={fileTreeKey}
+            rootPath={course.path}
+            naked
+            exclude={['Assignments']}
+            onStatsReady={(files, bytes) => setTreeStats({ files, bytes })}
+          />
+        </div>
+
+        {/* Footer */}
+        <div
+          className="flex flex-shrink-0 items-center justify-between px-4 no-drag"
+          style={{ height: 30, borderTop: '1px solid var(--color-border-s)', fontSize: 11, color: 'var(--color-mute)' }}
+        >
+          {treeStats ? (
+            <span>{treeStats.files} {treeStats.files === 1 ? 'file' : 'files'} · {formatBytes(treeStats.bytes)}</span>
+          ) : (
+            <span />
+          )}
+          <span className="flex items-center gap-1.5">
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block', flexShrink: 0 }} />
+            synced
+          </span>
         </div>
       </aside>
 
-      {/* Center */}
+      {/* ── Main: Assignments ─────────────────────────────────────────────────── */}
       <main className="flex flex-1 flex-col overflow-hidden">
-        <div className="drag-region h-8 flex-shrink-0" />
 
-        {/* Course header */}
-        <div className="border-b border-gray-200 px-6 py-4" style={{ borderTopColor: course.color, borderTopWidth: 3 }}>
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold text-gray-900">{course.name}</h1>
-              {course.description && (
-                <p className="mt-0.5 text-sm text-gray-500">{course.description}</p>
-              )}
-            </div>
+        {/* Color accent strip */}
+        <div style={{ height: 3, background: course.color, flexShrink: 0 }} />
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto" style={{ padding: '24px 28px' }}>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-ink)', margin: 0 }}>Assignments</h2>
           </div>
-        </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'assignments' ? (
-            <div>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-gray-900">Assignments</h2>
-                <button
-                    onClick={() => setShowNewAssignment(true)}
-                    className="btn-primary no-drag text-xs py-1.5 px-3"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                    </svg>
-                    New Assignment
-                  </button>
-              </div>
-
-              {isLoadingAssignments ? (
-                <div className="flex justify-center py-12">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-                </div>
-              ) : (
-                <>
-                  {upcoming.length > 0 && (
-                    <div className="mb-6">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Upcoming</p>
-                      <div className="space-y-2">
-                        {upcoming.map((a) => (
-                          <AssignmentRow key={a.id} assignment={a} courseId={course.id} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {past.length > 0 && (
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Past</p>
-                      <div className="space-y-2">
-                        {past.map((a) => (
-                          <AssignmentRow key={a.id} assignment={a} courseId={course.id} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {assignments.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <p className="text-gray-400 text-sm">No assignments yet.</p>
-                      <button
-                        onClick={() => setShowNewAssignment(true)}
-                        className="btn-primary mt-3 no-drag text-xs"
-                      >
-                        Add First Assignment
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          ) : selectedFolder ? (
-            <div>
-              <div className="mb-4 flex items-center gap-2">
-                <h2 className="text-base font-semibold text-gray-900">{selectedFolder.name}</h2>
-                <button
-                  onClick={() => { setCreatingSubfolder(true); setNewSubfolderName('') }}
-                  className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                  title="New subfolder"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
-                </button>
-              </div>
-              {creatingSubfolder && (
-                <form onSubmit={handleCreateSubfolder} className="mb-3 flex items-center gap-2">
-                  <svg className="h-4 w-4 flex-shrink-0 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-                  </svg>
-                  <input
-                    autoFocus
-                    type="text"
-                    value={newSubfolderName}
-                    onChange={(e) => setNewSubfolderName(e.target.value)}
-                    onBlur={() => { setCreatingSubfolder(false); setNewSubfolderName('') }}
-                    onKeyDown={(e) => { if (e.key === 'Escape') { setCreatingSubfolder(false); setNewSubfolderName('') } }}
-                    className="rounded border border-gray-300 px-2 py-1 text-sm"
-                    placeholder="Subfolder name"
-                  />
-                </form>
-              )}
-              <FileTree key={fileTreeKey} rootPath={selectedFolder.path} />
+          {isLoadingAssignments ? (
+            <div className="flex justify-center py-12">
+              <div className="h-6 w-6 animate-spin rounded-full border-2" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
             </div>
           ) : (
-            <p className="text-sm text-gray-400 py-4">Select a folder from the sidebar.</p>
+            <>
+              {upcoming.length > 0 && (
+                <div className="mb-6">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-mute)' }}>Upcoming</p>
+                  <div className="space-y-2">
+                    {upcoming.map((a) => (
+                      <AssignmentRow key={a.id} assignment={a} courseId={course.id} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {past.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-mute)' }}>Past</p>
+                  <div className="space-y-2">
+                    {past.map((a) => (
+                      <AssignmentRow key={a.id} assignment={a} courseId={course.id} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {assignments.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <p className="text-sm" style={{ color: 'var(--color-mute)' }}>No assignments yet.</p>
+                  <button
+                    onClick={() => setShowNewAssignment(true)}
+                    className="btn-primary mt-3 no-drag"
+                    style={{ fontSize: 12 }}
+                  >
+                    Add First Assignment
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>
 
-      {/* Right — Calendar */}
-      <aside className="hidden w-72 flex-shrink-0 overflow-hidden border-l border-gray-200 bg-white lg:flex lg:flex-col">
-        <div className="drag-region h-8 flex-shrink-0" />
-        <div className="flex-1 overflow-y-auto p-4 no-drag">
-          <h2 className="mb-4 text-sm font-semibold text-gray-900">Course Calendar</h2>
+      </div>{/* end columns */}
+
+      </div>{/* end left portion */}
+
+      {/* ── Right: Calendar ───────────────────────────────────────────────────── */}
+      <aside
+        className="hidden lg:flex lg:flex-col flex-shrink-0 overflow-hidden"
+        style={{ width: 288, borderLeft: '1px solid var(--color-border)', background: 'var(--color-panel)' }}
+      >
+        <div
+          className="drag-region flex-shrink-0 flex items-center px-4"
+          style={{ height: 44, borderBottom: '1px solid var(--color-border-s)' }}
+        >
+          <span className="no-drag" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink)' }}>Calendar</span>
+        </div>
+        <div className="flex-1 overflow-y-auto no-drag" style={{ padding: '14px 16px' }}>
           <CalendarPanel events={calendarEvents} courseId={course.id} />
         </div>
       </aside>
 
-      {/* New assignment modal */}
+      {/* ── New assignment modal ──────────────────────────────────────────────── */}
       {showNewAssignment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="card w-full max-w-md p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">New Assignment</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-ink)', margin: 0 }}>New Assignment</h2>
               <button
                 onClick={() => setShowNewAssignment(false)}
-                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"
+                style={{ display: 'flex', padding: 4, borderRadius: 6, color: 'var(--color-mute)', background: 'none', border: 'none', cursor: 'pointer' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-panel2)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
             <form onSubmit={handleCreateAssignment} className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Name</label>
+                <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-ink2)' }}>Name</label>
                 <input
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   required
                   autoFocus
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+                <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-ink2)' }}>Description</label>
                 <textarea
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
                   rows={2}
-                  className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full resize-none rounded-lg border px-3 py-2 text-sm"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Due date</label>
+                  <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-ink2)' }}>Due date</label>
                   <input
                     type="datetime-local"
                     value={newDueDate}
                     onChange={(e) => setNewDueDate(e.target.value)}
                     required
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Points</label>
+                  <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-ink2)' }}>Points</label>
                   <input
                     type="number"
                     value={newPoints}
                     onChange={(e) => setNewPoints(e.target.value)}
                     min={0}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                   />
                 </div>
               </div>
               {createError && (
-                <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{createError}</div>
+                <div className="rounded-lg p-3 text-sm" style={{ background: 'var(--color-danger-soft)', color: 'var(--color-danger)' }}>{createError}</div>
               )}
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => setShowNewAssignment(false)} className="btn-secondary flex-1 justify-center">
@@ -411,9 +395,7 @@ export default function CourseDetail() {
                 <button type="submit" disabled={isCreating} className="btn-primary flex-1 justify-center disabled:opacity-50">
                   {isCreating ? (
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  ) : (
-                    'Create'
-                  )}
+                  ) : 'Create'}
                 </button>
               </div>
             </form>
@@ -424,140 +406,7 @@ export default function CourseDetail() {
   )
 }
 
-// ── Folder sidebar item ───────────────────────────────────────────────────────
-
-function FolderSidebarItem({
-  folder,
-  isActive,
-  onSelect,
-  onReload
-}: {
-  folder: TreeNode
-  isActive: boolean
-  onSelect: (folder: TreeNode) => void
-  onReload: (selectName?: string) => void
-}) {
-  const [isHovered, setIsHovered] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [isRenaming, setIsRenaming] = useState(false)
-  const [renameValue, setRenameValue] = useState('')
-  const [isDeleting, setIsDeleting] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!menuOpen) return
-    function handleMouseDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleMouseDown)
-    return () => document.removeEventListener('mousedown', handleMouseDown)
-  }, [menuOpen])
-
-  async function handleRename(e: React.FormEvent) {
-    e.preventDefault()
-    const newName = renameValue.trim()
-    if (!newName || newName === folder.name) { setIsRenaming(false); return }
-    await api.renameFolder({ oldPath: folder.path, newName })
-    setIsRenaming(false)
-    onReload(newName)
-  }
-
-  async function handleDelete() {
-    await api.deleteFolder({ folderPath: folder.path })
-    onReload()
-  }
-
-  if (isRenaming) {
-    return (
-      <form onSubmit={handleRename} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-        <svg className="h-4 w-4 flex-shrink-0 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-        </svg>
-        <input
-          autoFocus
-          type="text"
-          value={renameValue}
-          onChange={(e) => setRenameValue(e.target.value)}
-          onBlur={() => setIsRenaming(false)}
-          onKeyDown={(e) => { if (e.key === 'Escape') setIsRenaming(false) }}
-          className="flex-1 min-w-0 rounded border border-gray-300 px-2 py-0.5 text-xs"
-        />
-      </form>
-    )
-  }
-
-  if (isDeleting) {
-    return (
-      <div className="flex items-center gap-1 rounded-lg bg-red-50 px-2 py-1.5">
-        <span className="flex-1 truncate text-xs font-medium text-red-600">Delete?</span>
-        <button
-          onClick={handleDelete}
-          className="flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600"
-        >
-          Delete
-        </button>
-        <button
-          onClick={() => setIsDeleting(false)}
-          className="flex-shrink-0 rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
-        >
-          Cancel
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div
-      className="relative"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <button
-        onClick={() => onSelect(folder)}
-        className={`sidebar-item w-full ${isActive ? 'active' : ''}`}
-        style={{ paddingRight: isHovered || menuOpen ? '1.75rem' : undefined }}
-      >
-        <svg className="h-4 w-4 flex-shrink-0 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-        </svg>
-        <span className="truncate">{folder.name}</span>
-      </button>
-
-      {(isHovered || menuOpen) && (
-        <div ref={menuRef} className="absolute right-1 top-1/2 -translate-y-1/2 z-10">
-          <button
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
-            className="flex items-center justify-center rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
-          >
-            <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z" />
-            </svg>
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-28 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg z-50">
-              <button
-                onClick={() => { setMenuOpen(false); setRenameValue(folder.name); setIsRenaming(true) }}
-                className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
-              >
-                Rename
-              </button>
-              <button
-                onClick={() => { setMenuOpen(false); setIsDeleting(true) }}
-                className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
-              >
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Tracked assignment row ────────────────────────────────────────────────────
+// ── Assignment row ────────────────────────────────────────────────────────────
 
 function AssignmentRow({ assignment, courseId }: { assignment: Assignment; courseId: string }) {
   const navigate = useNavigate()
@@ -569,37 +418,32 @@ function AssignmentRow({ assignment, courseId }: { assignment: Assignment; cours
   return (
     <button
       onClick={() => navigate(`/course/${courseId}/assignment/${assignment.id}`)}
-      className="card w-full p-4 text-left hover:shadow-md transition-shadow"
+      className="card w-full p-4 text-left transition-shadow hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-gray-900 truncate">{assignment.name}</p>
+          <p className="truncate font-medium" style={{ color: 'var(--color-ink)', fontSize: 13.5 }}>{assignment.name}</p>
           {assignment.description && (
-            <p className="mt-0.5 text-sm text-gray-500 truncate">{assignment.description}</p>
+            <p className="mt-0.5 truncate text-xs" style={{ color: 'var(--color-mute)' }}>{assignment.description}</p>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-2">
           {hasSubmission && (
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-              hasLate ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-            }`}>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${hasLate ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
               {hasLate ? 'Late' : 'Submitted'}
             </span>
           )}
           {!hasSubmission && isOverdue && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-              Overdue
-            </span>
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Overdue</span>
           )}
           {assignment.points > 0 && (
-            <span className="text-xs text-gray-400">{assignment.points}pts</span>
+            <span className="text-xs" style={{ color: 'var(--color-mute)' }}>{assignment.points}pts</span>
           )}
         </div>
       </div>
-      <p className={`mt-2 text-xs ${isOverdue && !hasSubmission ? 'text-red-500' : 'text-gray-400'}`}>
+      <p className={`mt-2 text-xs ${isOverdue && !hasSubmission ? 'text-red-500' : ''}`} style={!isOverdue || hasSubmission ? { color: 'var(--color-mute)' } : undefined}>
         Due {due.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
       </p>
     </button>
   )
 }
-
