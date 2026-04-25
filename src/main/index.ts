@@ -4,6 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import matter from 'gray-matter'
 import { v4 as uuidv4 } from 'uuid'
+import chokidar from 'chokidar'
 import type {
   Project,
   Assignment,
@@ -39,20 +40,32 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  // Run migration before the window loads so data is correct on first render
+  let vaultPath: string | null = null
+
+  // 1. Sync migration — must complete before window loads
   try {
     const configPath = getConfigPath()
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as AppConfig
       if (config.rootPath && fs.existsSync(config.rootPath)) {
         migrateCourseMdFiles(config.rootPath)
+        vaultPath = config.rootPath
       }
     }
   } catch (e) {
     console.error('[migration] failed to read config:', e)
   }
 
+  // 2. Show the window immediately — don't block on activity scan
   createWindow()
+
+  // 3. Activity init runs in the background after the window is ready
+  if (vaultPath) {
+    initAllProjectActivity(vaultPath).catch((e) =>
+      console.error('[activity] background init failed:', e)
+    )
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -60,6 +73,14 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('will-quit', () => {
+  // Close all chokidar watchers on exit
+  for (const watcher of watchers.values()) {
+    watcher.close().catch(() => { /* ignore close errors on exit */ })
+  }
+  watchers.clear()
 })
 
 // ─── File System Helpers ──────────────────────────────────────────────────────
@@ -205,6 +226,267 @@ function migrateCourseMdFiles(rootPath: string): void {
 
   migrate(rootPath)
   console.log('[migration] complete')
+}
+
+// ─── Activity Tracking ────────────────────────────────────────────────────────
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface ActivityEvent {
+  path: string               // relative to project root
+  mtime: string              // ISO 8601, rounded to nearest second
+  source: 'mtime' | 'chokidar'
+}
+
+interface ActivityFile {
+  events: ActivityEvent[]
+}
+
+interface Session {
+  start: string
+  end: string
+  durationMinutes: number
+}
+
+// ── In-memory state ────────────────────────────────────────────────────────────
+
+/** Dedup set per project: `${relativePath}|${mtime}` */
+const activityKeys  = new Map<string, Set<string>>()
+/** Serialised write promise per project (write queue) */
+const writeQueues   = new Map<string, Promise<void>>()
+/** Live chokidar watcher per project */
+const watchers      = new Map<string, ReturnType<typeof chokidar.watch>>()
+
+// ── Junk-file filter ───────────────────────────────────────────────────────────
+
+const JUNK_NAMES = new Set([
+  'activity.json', 'activity.json.tmp',
+  'project.md', 'assignment.md',
+  '.DS_Store', 'Thumbs.db', 'desktop.ini',
+])
+const JUNK_EXTS = new Set(['.tmp', '.swp', '.swo', '.bak'])
+
+function isJunk(filePath: string): boolean {
+  const name = path.basename(filePath)
+  if (name.startsWith('.') || name.startsWith('~')) return true
+  if (JUNK_NAMES.has(name)) return true
+  if (JUNK_EXTS.has(path.extname(name).toLowerCase())) return true
+  // Skip auto-generated submission .md files (always inside a submissions/ dir)
+  if (filePath.includes(`${path.sep}submissions${path.sep}`) && name.endsWith('.md')) return true
+  return false
+}
+
+// ── Timestamp helpers ──────────────────────────────────────────────────────────
+
+function roundToSecond(d: Date): Date {
+  return new Date(Math.round(d.getTime() / 1000) * 1000)
+}
+
+function makeActivityKey(relPath: string, mtime: string): string {
+  return `${relPath}|${mtime}`
+}
+
+// ── activity.json I/O ──────────────────────────────────────────────────────────
+
+function readActivityFile(projectPath: string): ActivityFile {
+  try {
+    const raw = fs.readFileSync(path.join(projectPath, 'activity.json'), 'utf-8')
+    const parsed = JSON.parse(raw) as ActivityFile
+    return Array.isArray(parsed?.events) ? parsed : { events: [] }
+  } catch {
+    return { events: [] }
+  }
+}
+
+/** Atomic write: write to .tmp then rename so we never corrupt the live file. */
+async function writeActivityFile(projectPath: string, file: ActivityFile): Promise<void> {
+  const dest = path.join(projectPath, 'activity.json')
+  const tmp  = dest + '.tmp'
+  await fs.promises.writeFile(tmp, JSON.stringify(file, null, 2), 'utf-8')
+  await fs.promises.rename(tmp, dest)
+}
+
+// ── Write queue ────────────────────────────────────────────────────────────────
+
+function enqueueActivityWrite(projectPath: string, fn: () => Promise<void>): void {
+  const prev = writeQueues.get(projectPath) ?? Promise.resolve()
+  const next = prev
+    .then(fn)
+    .catch((e) => console.error('[activity] write error:', projectPath, e))
+  writeQueues.set(projectPath, next)
+}
+
+/** Append new events to activity.json via the per-project write queue. */
+function appendActivityEvents(projectPath: string, newEvents: ActivityEvent[]): void {
+  if (newEvents.length === 0) return
+  enqueueActivityWrite(projectPath, async () => {
+    const file = readActivityFile(projectPath)
+    file.events.push(...newEvents)
+    await writeActivityFile(projectPath, file)
+  })
+}
+
+// ── Session clustering ─────────────────────────────────────────────────────────
+
+const SESSION_GAP_MS = 30 * 60 * 1000 // 30 minutes
+
+function clusterSessions(events: ActivityEvent[]): Session[] {
+  if (events.length === 0) return []
+
+  const sorted = [...events].sort(
+    (a, b) => new Date(a.mtime).getTime() - new Date(b.mtime).getTime()
+  )
+
+  const sessions: Session[] = []
+  let sessionStart = new Date(sorted[0].mtime)
+  let sessionEnd   = new Date(sorted[0].mtime)
+
+  for (let i = 1; i < sorted.length; i++) {
+    const t = new Date(sorted[i].mtime)
+    if (t.getTime() - sessionEnd.getTime() > SESSION_GAP_MS) {
+      sessions.push({
+        start: sessionStart.toISOString(),
+        end: sessionEnd.toISOString(),
+        durationMinutes: Math.round((sessionEnd.getTime() - sessionStart.getTime()) / 60000),
+      })
+      sessionStart = t
+    }
+    sessionEnd = t
+  }
+
+  sessions.push({
+    start: sessionStart.toISOString(),
+    end: sessionEnd.toISOString(),
+    durationMinutes: Math.round((sessionEnd.getTime() - sessionStart.getTime()) / 60000),
+  })
+
+  return sessions
+}
+
+function getProjectSessions(projectPath: string): Session[] {
+  return clusterSessions(readActivityFile(projectPath).events)
+}
+
+// ── Startup mtime scan ─────────────────────────────────────────────────────────
+
+async function scanProjectMtimes(projectPath: string): Promise<void> {
+  const keySet = activityKeys.get(projectPath)!
+  const newEvents: ActivityEvent[] = []
+
+  async function walk(dir: string): Promise<void> {
+    let entries: fs.Dirent[]
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (!entry.name.startsWith('.')) await walk(fullPath)
+      } else if (entry.isFile()) {
+        if (isJunk(fullPath)) continue
+        try {
+          const stat  = await fs.promises.stat(fullPath)
+          const mtime = roundToSecond(stat.mtime).toISOString()
+          const rel   = path.relative(projectPath, fullPath)
+          const key   = makeActivityKey(rel, mtime)
+          if (!keySet.has(key)) {
+            keySet.add(key)
+            newEvents.push({ path: rel, mtime, source: 'mtime' })
+          }
+        } catch {
+          /* file vanished between readdir and stat — skip */
+        }
+      }
+    }
+  }
+
+  await walk(projectPath)
+  appendActivityEvents(projectPath, newEvents)
+}
+
+// ── Chokidar live watcher ──────────────────────────────────────────────────────
+
+function startProjectWatcher(projectPath: string): void {
+  if (watchers.has(projectPath)) return
+
+  const keySet = activityKeys.get(projectPath)!
+
+  const watcher = chokidar.watch(projectPath, {
+    ignoreInitial: true,         // don't re-fire for files already scanned on startup
+    persistent: true,
+    followSymlinks: false,       // avoid infinite loops from circular symlinks
+    awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+    ignored: (p: string) => isJunk(p),
+  })
+
+  function handleFile(filePath: string): void {
+    try {
+      const stat  = fs.statSync(filePath)
+      const mtime = roundToSecond(stat.mtime).toISOString()
+      const rel   = path.relative(projectPath, filePath)
+      const key   = makeActivityKey(rel, mtime)
+      if (keySet.has(key)) return
+      keySet.add(key)
+      appendActivityEvents(projectPath, [{ path: rel, mtime, source: 'chokidar' }])
+    } catch {
+      /* file disappeared before stat — ignore */
+    }
+  }
+
+  watcher.on('add', handleFile)
+  watcher.on('change', handleFile)
+  watcher.on('error', (e) => console.error('[activity] watcher error:', projectPath, e))
+
+  watchers.set(projectPath, watcher)
+}
+
+// ── Project initialisation ─────────────────────────────────────────────────────
+
+async function initProjectActivity(projectPath: string): Promise<void> {
+  if (activityKeys.has(projectPath)) return  // already initialised (idempotent)
+
+  // Populate dedup set from existing activity.json so we never re-record known events
+  const existing = readActivityFile(projectPath)
+  const keySet   = new Set<string>()
+  for (const ev of existing.events) {
+    keySet.add(makeActivityKey(ev.path, ev.mtime))
+  }
+  activityKeys.set(projectPath, keySet)
+
+  // Mtime scan first; watcher starts after so ignoreInitial is always safe
+  await scanProjectMtimes(projectPath)
+  startProjectWatcher(projectPath)
+}
+
+async function initAllProjectActivity(vaultPath: string): Promise<void> {
+  if (!fs.existsSync(vaultPath)) return
+
+  async function findProjects(dir: string): Promise<string[]> {
+    const results: string[] = []
+    let entries: fs.Dirent[]
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true })
+    } catch {
+      return results
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === '_Archive') continue
+      const sub = path.join(dir, entry.name)
+      if (fs.existsSync(path.join(sub, 'project.md'))) {
+        results.push(sub)
+      } else {
+        results.push(...(await findProjects(sub)))
+      }
+    }
+    return results
+  }
+
+  const projects = await findProjects(vaultPath)
+  await Promise.all(projects.map(initProjectActivity))
+  console.log(`[activity] initialised ${projects.length} project(s)`)
 }
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
@@ -373,6 +655,11 @@ ipcMain.handle('fs:create-project', (_e, params: CreateProjectParams): IpcResult
       created: new Date().toISOString(),
       sections: ['Resources', 'Weekly', 'Assignments']
     })
+
+    // Start activity tracking for the new project (fire-and-forget)
+    initProjectActivity(projectPath).catch((e) =>
+      console.error('[activity] failed to init new project:', e)
+    )
 
     return {
       success: true,
@@ -730,6 +1017,56 @@ ipcMain.handle(
     }
   }
 )
+
+ipcMain.handle('fs:get-activity', (_e, projectPath: string): IpcResult<Session[]> => {
+  try {
+    return { success: true, data: getProjectSessions(projectPath) }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:get-project-meta', (_e, projectPath: string): IpcResult<{ createdAt: string }> => {
+  try {
+    const stat = fs.statSync(projectPath)
+    return { success: true, data: { createdAt: stat.birthtime.toISOString() } }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:get-project-notes', (_e, projectPath: string): IpcResult<{ description: string; outcome: string }> => {
+  try {
+    const mdPath = path.join(projectPath, 'project.md')
+    const parsed = parseMdWithContent(mdPath)
+    if (!parsed) return { success: true, data: { description: '', outcome: '' } }
+    const body = parsed.content.trim()
+    const descMatch = body.match(/##\s+Description\s*\n([\s\S]*?)(?=\n##\s+|\s*$)/)
+    const outcomeMatch = body.match(/##\s+Outcome\s*\n([\s\S]*?)(?=\n##\s+|\s*$)/)
+    return {
+      success: true,
+      data: {
+        description: descMatch ? descMatch[1].trim() : '',
+        outcome: outcomeMatch ? outcomeMatch[1].trim() : '',
+      }
+    }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:set-project-notes', (_e, projectPath: string, description: string, outcome: string): IpcResult<void> => {
+  try {
+    const mdPath = path.join(projectPath, 'project.md')
+    const parsed = parseMdWithContent(mdPath)
+    if (!parsed) return { success: false, error: 'project.md not found' }
+    const body = `## Description\n${description}\n\n## Outcome\n${outcome}`
+    writeMd(mdPath, parsed.data, body)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
 
 ipcMain.handle(
   'fs:copy-file',

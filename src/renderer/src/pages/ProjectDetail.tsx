@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
 import { api } from '../lib/api'
 import CalendarPanel from '../components/CalendarPanel'
 import FileTree from '../components/FileTree'
 import type { Assignment } from '../../../../types/index'
+
+function countWords(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -39,6 +43,16 @@ export default function ProjectDetail() {
   const [newTopFolderName, setNewTopFolderName] = useState('')
   const [treeStats, setTreeStats] = useState<{ files: number; bytes: number } | null>(null)
 
+  // Activity
+  const [activitySessions, setActivitySessions] = useState<{ start: string; end: string; durationMinutes: number }[]>([])
+  const [projectCreatedAt, setProjectCreatedAt] = useState<string | null>(null)
+
+  // Notes (Description + Outcome)
+  const [noteDescription, setNoteDescription] = useState('')
+  const [noteOutcome, setNoteOutcome] = useState('')
+  const descRef = useRef<HTMLTextAreaElement>(null)
+  const outcomeRef = useRef<HTMLTextAreaElement>(null)
+
   // Drop-onto-project-root
   const [isDragOver, setIsDragOver] = useState(false)
   const dragCounter = useRef(0)
@@ -53,6 +67,35 @@ export default function ProjectDetail() {
         setIsLoadingAssignments(false)
       })
   }, [project]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!project) return
+    api.getActivity(project.path).then((res) => {
+      if (res.success && res.data) setActivitySessions(res.data)
+    })
+    api.getProjectMeta(project.path).then((res) => {
+      if (res.success && res.data) setProjectCreatedAt(res.data.createdAt)
+    })
+  }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!project) return
+    api.getProjectNotes(project.path).then((res) => {
+      if (res.success && res.data) {
+        setNoteDescription(res.data.description)
+        setNoteOutcome(res.data.outcome)
+        // Grow textareas to fit loaded content
+        requestAnimationFrame(() => {
+          for (const ref of [descRef, outcomeRef]) {
+            if (ref.current) {
+              ref.current.style.height = 'auto'
+              ref.current.style.height = ref.current.scrollHeight + 'px'
+            }
+          }
+        })
+      }
+    })
+  }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreateTopFolder(e: React.FormEvent) {
     e.preventDefault()
@@ -97,6 +140,33 @@ export default function ProjectDetail() {
     setShowNewAssignment(false)
     setIsCreating(false)
   }
+
+  const projectStats = useMemo(() => {
+    const now = new Date()
+    const overdue   = assignments.filter((a) => a.submissions.length === 0 && a.due_date && new Date(a.due_date) < now).length
+    const remaining = assignments.filter((a) => a.submissions.length === 0 && a.due_date && new Date(a.due_date) >= now).length
+    const completed = assignments.filter((a) => a.submissions.length > 0).length
+    return { overdue, remaining, completed }
+  }, [assignments])
+
+  const activityDays = useMemo(() => {
+    if (!projectCreatedAt) return []
+    const start = new Date(projectCreatedAt)
+    start.setHours(0, 0, 0, 0)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const days: { date: string; hours: number }[] = []
+    const cur = new Date(start)
+    while (cur <= today) {
+      const dateStr = cur.toISOString().slice(0, 10)
+      const hours = activitySessions
+        .filter((s) => s.start.slice(0, 10) === dateStr)
+        .reduce((sum, s) => sum + s.durationMinutes / 60, 0)
+      days.push({ date: dateStr, hours })
+      cur.setDate(cur.getDate() + 1)
+    }
+    return days
+  }, [activitySessions, projectCreatedAt])
 
   if (!project) {
     return (
@@ -252,52 +322,141 @@ export default function ProjectDetail() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto" style={{ padding: '24px 28px' }}>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-ink)', margin: 0 }}>Assignments</h2>
+          {/* Project title block */}
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <p style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-mute)', letterSpacing: '0.04em', marginBottom: 4 }}>
+                P-101 · {activeWorkspace}
+              </p>
+              <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--color-ink)', margin: 0, lineHeight: 1.1 }}>
+                {project.name}
+              </h1>
+            </div>
+            <button
+              onClick={() => setShowNewAssignment(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px',
+                background: 'var(--color-ink)', color: 'var(--color-bg)',
+                border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, marginTop: 2,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New Assignment
+            </button>
           </div>
 
-          {isLoadingAssignments ? (
-            <div className="flex justify-center py-12">
-              <div className="h-6 w-6 animate-spin rounded-full border-2" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+          {/* Stat strip */}
+          <div
+            className="flex-shrink-0 grid mb-6"
+            style={{ gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)', marginLeft: -28, marginRight: -28 }}
+          >
+            {[
+              { label: 'Overdue',   value: projectStats.overdue,   color: 'var(--color-danger)' },
+              { label: 'Remaining', value: projectStats.remaining, color: 'var(--accent)' },
+              { label: 'Completed', value: projectStats.completed, color: 'var(--color-success)' },
+            ].map((s, i) => (
+              <div
+                key={s.label}
+                style={{
+                  padding: '12px 28px',
+                  borderRight: i < 2 ? '1px solid var(--color-border)' : 'none',
+                  display: 'flex', flexDirection: 'column', gap: 3,
+                }}
+              >
+                <div style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--color-mute)', fontWeight: 500, textTransform: 'uppercase' }}>{s.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 500, color: s.color, letterSpacing: '-0.04em', lineHeight: 1 }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Analytics — 1/3 donut + 2/3 assignments list */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'stretch' }}>
+
+            {/* Donut container — 1/3 */}
+            <div style={{ flex: '0 0 33.333%', padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+              <DonutChart overdue={projectStats.overdue} remaining={projectStats.remaining} completed={projectStats.completed} />
+              {/* Legend — vertical stack, centered */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7, alignSelf: 'center', minWidth: 130 }}>
+                {[
+                  { label: 'Overdue',   value: projectStats.overdue,   color: 'var(--color-danger)' },
+                  { label: 'Remaining', value: projectStats.remaining, color: 'var(--accent)' },
+                  { label: 'Completed', value: projectStats.completed, color: 'var(--color-success)' },
+                ].map((item) => (
+                  <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11.5, color: 'var(--color-ink2)', flex: 1 }}>{item.label}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--color-ink)', fontFamily: '"Geist Mono", monospace' }}>{item.value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : (
-            <>
-              {upcoming.length > 0 && (
-                <div className="mb-6">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-mute)' }}>Upcoming</p>
-                  <div className="space-y-2">
-                    {upcoming.map((a) => (
-                      <AssignmentRow key={a.id} assignment={a} projectId={project.id} />
-                    ))}
-                  </div>
-                </div>
-              )}
 
-              {past.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-mute)' }}>Past</p>
-                  <div className="space-y-2">
-                    {past.map((a) => (
-                      <AssignmentRow key={a.id} assignment={a} projectId={project.id} />
-                    ))}
-                  </div>
+            {/* Notes container — 2/3 */}
+            <div style={{ flex: '0 0 calc(66.667% - 12px)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Description */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400 }}>Description</span>
+                  <span style={{ fontSize: 10.5, color: countWords(noteDescription) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>
+                    {countWords(noteDescription)} / 100
+                  </span>
                 </div>
-              )}
+                <textarea
+                  ref={descRef}
+                  value={noteDescription}
+                  placeholder="Add a project description..."
+                  rows={2}
+                  onChange={(e) => {
+                    if (countWords(e.target.value) > 100) return
+                    setNoteDescription(e.target.value)
+                    e.target.style.height = 'auto'
+                    e.target.style.height = e.target.scrollHeight + 'px'
+                  }}
+                  onBlur={() => api.setProjectNotes(project.path, noteDescription, noteOutcome)}
+                  className="note-input"
+                  style={{ width: '100%', resize: 'none', overflow: 'hidden', fontSize: 13, lineHeight: 1.6, color: 'var(--color-ink)', padding: 0 }}
+                />
+              </div>
 
-              {assignments.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <p className="text-sm" style={{ color: 'var(--color-mute)' }}>No assignments yet.</p>
-                  <button
-                    onClick={() => setShowNewAssignment(true)}
-                    className="btn-primary mt-3 no-drag"
-                    style={{ fontSize: 12 }}
-                  >
-                    Add First Assignment
-                  </button>
+              {/* Divider */}
+              <div style={{ borderTop: '1px solid var(--color-border)' }} />
+
+              {/* Outcome */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400 }}>Outcome</span>
+                  <span style={{ fontSize: 10.5, color: countWords(noteOutcome) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>
+                    {countWords(noteOutcome)} / 100
+                  </span>
                 </div>
-              )}
-            </>
-          )}
+                <textarea
+                  ref={outcomeRef}
+                  value={noteOutcome}
+                  placeholder="Define your desired outcome..."
+                  rows={2}
+                  onChange={(e) => {
+                    if (countWords(e.target.value) > 100) return
+                    setNoteOutcome(e.target.value)
+                    e.target.style.height = 'auto'
+                    e.target.style.height = e.target.scrollHeight + 'px'
+                  }}
+                  onBlur={() => api.setProjectNotes(project.path, noteDescription, noteOutcome)}
+                  className="note-input"
+                  style={{ width: '100%', resize: 'none', overflow: 'hidden', fontSize: 13, lineHeight: 1.6, color: 'var(--color-ink)', padding: 0 }}
+                />
+              </div>
+            </div>
+
+          </div>
+
+          {/* Resource Hub */}
+          <div style={{ marginBottom: 24 }}>
+            <p style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-mute)', marginBottom: 10 }}>Resource Hub</p>
+            <div style={{ padding: 20 }} />
+          </div>
         </div>
       </main>
 
@@ -317,7 +476,23 @@ export default function ProjectDetail() {
           <span className="no-drag" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink)' }}>Calendar</span>
         </div>
         <div className="flex-1 overflow-y-auto no-drag" style={{ padding: '14px 16px' }}>
-          <CalendarPanel events={calendarEvents} projectId={project.id} />
+          <CalendarPanel
+            events={calendarEvents}
+            projectId={project.id}
+            completedEvents={assignments
+              .filter((a) => a.submissions.length > 0)
+              .map((a) => ({
+                id: a.id,
+                title: a.name,
+                due_date: a.due_date,
+                projectId: a.projectId,
+                projectName: a.projectName,
+                projectColor: a.projectColor,
+                assignmentId: a.id,
+                type: 'assignment' as const,
+                isLate: false,
+              }))}
+          />
         </div>
       </aside>
 
@@ -403,6 +578,209 @@ export default function ProjectDetail() {
         </div>
       )}
     </div>
+  )
+}
+
+// ── Donut chart ───────────────────────────────────────────────────────────────
+
+function DonutChart({ overdue, remaining, completed }: { overdue: number; remaining: number; completed: number }) {
+  const total = overdue + remaining + completed
+  const r = 52
+  const cx = 76
+  const cy = 76
+  const strokeWidth = 14
+  const circumference = 2 * Math.PI * r
+
+  if (total === 0) {
+    return (
+      <svg viewBox="0 0 152 152" width={152} height={152} style={{ flexShrink: 0 }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--color-border)" strokeWidth={strokeWidth} />
+        <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
+          style={{ fontSize: 13, fontWeight: 600, fill: 'var(--color-mute)', fontFamily: 'inherit' }}>
+          No data
+        </text>
+      </svg>
+    )
+  }
+
+  const pct = Math.round((completed / total) * 100)
+
+  // Build arc segments in draw order; each circle uses dashoffset to position its slice
+  const segments = [
+    { value: overdue,   color: 'var(--color-danger)' },
+    { value: remaining, color: 'var(--accent)' },
+    { value: completed, color: 'var(--color-success)' },
+  ]
+
+  let accumulated = 0
+  const arcs = segments.map((seg) => {
+    const dash = (seg.value / total) * circumference
+    const arc = { color: seg.color, dash, offset: -accumulated }
+    accumulated += dash
+    return arc
+  })
+
+  return (
+    <svg viewBox="0 0 152 152" width={152} height={152} style={{ flexShrink: 0 }}>
+      {/* Track */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--color-border-s)" strokeWidth={strokeWidth} />
+      {/* Segments — rotate -90 so arcs start at 12 o'clock */}
+      {arcs.map((arc, i) =>
+        arc.dash > 0 ? (
+          <circle
+            key={i}
+            cx={cx} cy={cy} r={r}
+            fill="none"
+            stroke={arc.color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="butt"
+            strokeDasharray={`${arc.dash} ${circumference}`}
+            strokeDashoffset={arc.offset}
+            transform={`rotate(-90 ${cx} ${cy})`}
+          />
+        ) : null
+      )}
+      {/* Center: percentage */}
+      <text x={cx} y={cy - 7} textAnchor="middle"
+        style={{ fontSize: 20, fontWeight: 700, fill: 'var(--color-ink)', fontFamily: 'inherit', letterSpacing: '-0.04em' }}>
+        {pct}%
+      </text>
+      <text x={cx} y={cy + 11} textAnchor="middle"
+        style={{ fontSize: 9.5, fontWeight: 500, fill: 'var(--color-mute)', fontFamily: 'inherit', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+        Complete
+      </text>
+    </svg>
+  )
+}
+
+// ── Activity chart ────────────────────────────────────────────────────────────
+
+/** Catmull-Rom → cubic bezier smooth path through a set of [x,y] points */
+function buildSmoothPath(pts: [number, number][]): string {
+  if (pts.length === 0) return ''
+  if (pts.length === 1) return `M ${pts[0][0]} ${pts[0][1]}`
+  let d = `M ${pts[0][0]} ${pts[0][1]}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(i - 1, 0)]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[Math.min(i + 2, pts.length - 1)]
+    const cp1x = p1[0] + (p2[0] - p0[0]) / 6
+    const cp1y = p1[1] + (p2[1] - p0[1]) / 6
+    const cp2x = p2[0] - (p3[0] - p1[0]) / 6
+    const cp2y = p2[1] - (p3[1] - p1[1]) / 6
+    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2[0]} ${p2[1]}`
+  }
+  return d
+}
+
+function ActivityChart({ days }: { days: { date: string; hours: number }[] }) {
+  const W = 340
+  const H = 110
+  const padL = 28
+  const padR = 8
+  const padT = 8
+  const padB = 22
+
+  const chartW = W - padL - padR
+  const chartH = H - padT - padB
+
+  if (days.length === 0) {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ fontSize: 12, color: 'var(--color-mute)' }}>No activity recorded yet</span>
+      </div>
+    )
+  }
+
+  const maxHours = Math.max(...days.map((d) => d.hours), 0.5)
+  // Y axis nice max
+  const yMax = maxHours <= 1 ? 1 : maxHours <= 2 ? 2 : maxHours <= 4 ? 4 : maxHours <= 8 ? 8 : Math.ceil(maxHours)
+  const yTicks = yMax <= 2 ? [0, yMax / 2, yMax] : [0, yMax / 2, yMax]
+
+  const xFor = (i: number) => padL + (days.length === 1 ? chartW / 2 : (i / (days.length - 1)) * chartW)
+  const yFor = (h: number) => padT + chartH - (h / yMax) * chartH
+
+  const pts: [number, number][] = days.map((d, i) => [xFor(i), yFor(d.hours)])
+  const linePath = buildSmoothPath(pts)
+
+  // Closed area path (line + drop to baseline)
+  const areaPath = pts.length > 0
+    ? `${linePath} L ${pts[pts.length - 1][0]} ${padT + chartH} L ${pts[0][0]} ${padT + chartH} Z`
+    : ''
+
+  // X-axis labels: show at most 4 evenly spaced (first, last, ~mid)
+  const xLabelIndices: number[] = []
+  if (days.length === 1) {
+    xLabelIndices.push(0)
+  } else if (days.length <= 4) {
+    days.forEach((_, i) => xLabelIndices.push(i))
+  } else {
+    xLabelIndices.push(0)
+    xLabelIndices.push(Math.round((days.length - 1) / 2))
+    xLabelIndices.push(days.length - 1)
+  }
+
+  function fmtDate(dateStr: string) {
+    const d = new Date(dateStr + 'T12:00:00')
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  const gradId = 'actGrad'
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ overflow: 'visible', display: 'block' }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Y-axis grid lines + labels */}
+      {yTicks.map((tick) => {
+        const y = yFor(tick)
+        return (
+          <g key={tick}>
+            <line x1={padL} y1={y} x2={W - padR} y2={y}
+              stroke="var(--color-border)" strokeWidth={1} strokeDasharray="3 3" />
+            <text x={padL - 5} y={y} textAnchor="end" dominantBaseline="middle"
+              style={{ fontSize: 9, fill: 'var(--color-mute)', fontFamily: 'inherit' }}>
+              {tick === 0 ? '' : tick % 1 === 0 ? `${tick}h` : `${tick.toFixed(1)}h`}
+            </text>
+          </g>
+        )
+      })}
+
+      {/* Area fill */}
+      {areaPath && (
+        <path d={areaPath} fill={`url(#${gradId})`} />
+      )}
+
+      {/* Line */}
+      {linePath && (
+        <path d={linePath} fill="none" stroke="var(--accent)" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+      )}
+
+      {/* Dots on non-zero days */}
+      {pts.map(([x, y], i) =>
+        days[i].hours > 0 ? (
+          <circle key={i} cx={x} cy={y} r={2.5} fill="var(--accent)" />
+        ) : null
+      )}
+
+      {/* X-axis baseline */}
+      <line x1={padL} y1={padT + chartH} x2={W - padR} y2={padT + chartH}
+        stroke="var(--color-border)" strokeWidth={1} />
+
+      {/* X-axis labels */}
+      {xLabelIndices.map((i) => (
+        <text key={i} x={xFor(i)} y={H - 4} textAnchor="middle"
+          style={{ fontSize: 9, fill: 'var(--color-mute)', fontFamily: 'inherit' }}>
+          {fmtDate(days[i].date)}
+        </text>
+      ))}
+    </svg>
   )
 }
 

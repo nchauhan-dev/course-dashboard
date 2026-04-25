@@ -44,6 +44,11 @@ declare global {
         endDate: string
       ) => Promise<IpcResult<CalendarEvent[]>>
 
+      getActivity: (projectPath: string) => Promise<IpcResult<{ start: string; end: string; durationMinutes: number }[]>>
+      getProjectMeta: (projectPath: string) => Promise<IpcResult<{ createdAt: string }>>
+      getProjectNotes: (projectPath: string) => Promise<IpcResult<{ description: string; outcome: string }>>
+      setProjectNotes: (projectPath: string, description: string, outcome: string) => Promise<IpcResult<void>>
+
       getSectionFiles: (sectionPath: string) => Promise<IpcResult<string[]>>
       readFile: (filePath: string) => Promise<IpcResult<string>>
       openPath: (filePath: string) => Promise<void>
@@ -82,6 +87,11 @@ export const api = {
 
   getCalendarEvents: (rootPath: string, startDate: string, endDate: string) =>
     window.api.getCalendarEvents(rootPath, startDate, endDate),
+
+  getActivity: (projectPath: string) => window.api.getActivity(projectPath),
+  getProjectMeta: (projectPath: string) => window.api.getProjectMeta(projectPath),
+  getProjectNotes: (projectPath: string) => window.api.getProjectNotes(projectPath),
+  setProjectNotes: (projectPath: string, description: string, outcome: string) => window.api.setProjectNotes(projectPath, description, outcome),
 
   getSectionFiles: (sectionPath: string) => window.api.getSectionFiles(sectionPath),
   readFile: (filePath: string) => window.api.readFile(filePath),

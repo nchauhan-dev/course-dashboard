@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld('api', {
   getCalendarEvents: (rootPath: string, startDate: string, endDate: string) =>
     ipcRenderer.invoke('fs:get-calendar-events', rootPath, startDate, endDate),
 
+  getActivity: (projectPath: string) => ipcRenderer.invoke('fs:get-activity', projectPath),
+  getProjectMeta: (projectPath: string) => ipcRenderer.invoke('fs:get-project-meta', projectPath),
+  getProjectNotes: (projectPath: string) => ipcRenderer.invoke('fs:get-project-notes', projectPath),
+  setProjectNotes: (projectPath: string, description: string, outcome: string) => ipcRenderer.invoke('fs:set-project-notes', projectPath, description, outcome),
+
   getSectionFiles: (sectionPath: string) => ipcRenderer.invoke('fs:get-section-files', sectionPath),
   readFile: (filePath: string) => ipcRenderer.invoke('fs:read-file', filePath),
   openPath: (filePath: string) => ipcRenderer.invoke('shell:open-path', filePath),

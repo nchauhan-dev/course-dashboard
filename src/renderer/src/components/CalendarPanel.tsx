@@ -5,6 +5,7 @@ import type { CalendarEvent } from '../../../../types/index'
 interface Props {
   events: CalendarEvent[]
   projectId?: string
+  completedEvents?: CalendarEvent[]
 }
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -13,7 +14,7 @@ const MONTHS = [
   'July','August','September','October','November','December'
 ]
 
-export default function CalendarPanel({ events, projectId }: Props) {
+export default function CalendarPanel({ events, projectId, completedEvents = [] }: Props) {
   const navigate = useNavigate()
   const today = useMemo(() => new Date(), [])
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
@@ -142,35 +143,32 @@ export default function CalendarPanel({ events, projectId }: Props) {
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--color-mute)' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, fontSize: 10, color: 'var(--color-mute)' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-danger)', display: 'inline-block' }} /> Overdue
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} /> Today
         </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-mute)', display: 'inline-block' }} /> Later
+        </span>
       </div>
+
+      {/* Divider */}
+      <div style={{ borderTop: '1px solid var(--color-border)' }} />
 
       {/* Upcoming — grouped by status */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--color-mute)', fontWeight: 500, textTransform: 'uppercase' }}>Upcoming</span>
+          <span style={{ fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--color-mute)', fontWeight: 500, textTransform: 'uppercase' }}>Assignments</span>
           <span style={{ fontSize: 11, color: 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>{totalUpcoming}</span>
         </div>
 
-        {totalUpcoming === 0 && (
-          <p style={{ fontSize: 12, color: 'var(--color-mute)', textAlign: 'center', padding: '8px 0' }}>Nothing coming up — nice.</p>
-        )}
-
-        {grouped.overdue.length > 0 && (
-          <UpcomingGroup label="Overdue" tone="danger" events={grouped.overdue} projectId={projectId} navigate={navigate} />
-        )}
-        {grouped.dueToday.length > 0 && (
-          <UpcomingGroup label="Today" tone="today" events={grouped.dueToday} projectId={projectId} navigate={navigate} />
-        )}
-        {grouped.later.length > 0 && (
-          <UpcomingGroup label="Later" tone="mute" events={grouped.later} projectId={projectId} navigate={navigate} />
-        )}
+        <UpcomingGroup label="Completed" tone="success" events={completedEvents} projectId={projectId} navigate={navigate} />
+        <UpcomingGroup label="Overdue"   tone="danger"  events={grouped.overdue}  projectId={projectId} navigate={navigate} />
+        <UpcomingGroup label="Today"   tone="today"  events={grouped.dueToday} projectId={projectId} navigate={navigate} />
+        <UpcomingGroup label="Later"   tone="mute"   events={grouped.later}    projectId={projectId} navigate={navigate} />
       </div>
     </div>
   )
@@ -180,61 +178,99 @@ function UpcomingGroup({
   label, tone, events, projectId, navigate
 }: {
   label: string
-  tone: 'danger' | 'today' | 'mute'
+  tone: 'success' | 'danger' | 'today' | 'mute'
   events: CalendarEvent[]
   projectId?: string
   navigate: ReturnType<typeof useNavigate>
 }) {
-  const dotColor = tone === 'danger' ? 'var(--color-danger)' : tone === 'today' ? 'var(--accent)' : 'var(--color-mute)'
+  const [expanded, setExpanded] = useState(true)
+  const dotColor = tone === 'success' ? 'var(--color-success)' : tone === 'danger' ? 'var(--color-danger)' : tone === 'today' ? 'var(--accent)' : 'var(--color-mute)'
+
   return (
-    <div style={{ marginBottom: 14 }}>
-      {/* Group header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+    <div style={{ marginBottom: 12 }}>
+      {/* Group header — clickable row */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+          background: 'var(--color-border-s)', border: 'none', padding: '3px 6px', cursor: 'pointer',
+          marginBottom: expanded ? 8 : 0, borderRadius: 5,
+        }}
+      >
+        {/* Chevron — points down when expanded, left when collapsed */}
+        <svg
+          width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+          style={{
+            color: 'var(--color-mute)', flexShrink: 0,
+            transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+            transition: 'transform 0.15s ease',
+          }}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+        {/* Status dot */}
         <span style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor, display: 'inline-block', flexShrink: 0 }} />
-        <span style={{ fontSize: 11, color: 'var(--color-ink2)', fontWeight: 500 }}>{label}</span>
-        <span style={{ fontSize: 11, color: 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>{events.length}</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        {events.map((ev) => {
-          const due = new Date(ev.due_date)
-          const timeLabel = due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-          const dateLabel = ev.isLate
-            ? due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-            : due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          return (
-            <button
-              key={ev.id}
-              onClick={() => navigate(`/project/${ev.projectId}/assignment/${ev.assignmentId}`)}
-              style={{ display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%' }}
-            >
-              {/* Check circle */}
-              <div style={{
-                width: 13, height: 13, borderRadius: '50%', flexShrink: 0, marginTop: 2,
-                border: `1.5px solid ${tone === 'danger' ? 'var(--color-danger)' : 'var(--color-border)'}`,
-                background: 'transparent',
-              }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3, color: 'var(--color-ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {ev.title}
-                </div>
-                {!projectId && (
-                  <div style={{ fontSize: 11, color: 'var(--color-mute)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 5, opacity: 0.75 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: ev.projectColor, display: 'inline-block', flexShrink: 0 }} />
-                    <span>{ev.projectName}</span>
+        {/* Label */}
+        <span style={{ fontSize: 11, color: 'var(--color-ink2)', fontWeight: 500, flex: 1, textAlign: 'left' }}>{label}</span>
+        {/* Count pill */}
+        <span style={{
+          fontSize: 10, fontFamily: '"Geist Mono", monospace', fontWeight: 500,
+          background: 'var(--color-panel2)', border: '1px solid var(--color-border)',
+          borderRadius: 99, padding: '1px 6px', color: 'var(--color-mute)', lineHeight: 1.6,
+        }}>
+          {events.length}
+        </span>
+      </button>
+
+      {/* Items or empty state */}
+      {expanded && (
+        events.length === 0 ? (
+          <p style={{ fontSize: 11.5, color: 'var(--color-mute)', margin: 0, padding: '2px 0 4px 17px', fontStyle: 'italic' }}>
+            None, you're on track.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {events.map((ev) => {
+              const due = new Date(ev.due_date)
+              const timeLabel = due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+              const dateLabel = due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              return (
+                <button
+                  key={ev.id}
+                  onClick={() => navigate(`/project/${ev.projectId}/assignment/${ev.assignmentId}`)}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%' }}
+                >
+                  {/* Check circle */}
+                  <div style={{
+                    width: 13, height: 13, borderRadius: '50%', flexShrink: 0, marginTop: 2,
+                    border: `1.5px solid ${tone === 'success' ? 'var(--color-success)' : tone === 'danger' ? 'var(--color-danger)' : 'var(--color-border)'}`,
+                    background: 'transparent',
+                  }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3, color: 'var(--color-ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {ev.title}
+                    </div>
+                    {!projectId && (
+                      <div style={{ fontSize: 11, color: 'var(--color-mute)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 5, opacity: 0.75 }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: ev.projectColor, display: 'inline-block', flexShrink: 0 }} />
+                        <span>{ev.projectName}</span>
+                      </div>
+                    )}
+                    <div style={{
+                      fontSize: 10.5, marginTop: 2,
+                      color: tone === 'danger' ? 'var(--color-danger)' : tone === 'success' ? 'var(--color-success)' : 'var(--color-mute)',
+                      fontFamily: '"Geist Mono", monospace', letterSpacing: '0.01em',
+                    }}>
+                      {dateLabel} · {timeLabel}
+                    </div>
                   </div>
-                )}
-                <div style={{
-                  fontSize: 10.5, marginTop: 2,
-                  color: tone === 'danger' ? 'var(--color-danger)' : 'var(--color-mute)',
-                  fontFamily: '"Geist Mono", monospace', letterSpacing: '0.01em',
-                }}>
-                  {dateLabel} · {timeLabel}
-                </div>
-              </div>
-            </button>
-          )
-        })}
-      </div>
+                </button>
+              )
+            })}
+          </div>
+        )
+      )}
     </div>
   )
 }
