@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   getAssignments: (projectId: string, projectPath: string, projectName: string, projectColor: string) =>
     ipcRenderer.invoke('fs:get-assignments', projectId, projectPath, projectName, projectColor),
   createAssignment: (params: unknown) => ipcRenderer.invoke('fs:create-assignment', params),
+  updateAssignment: (params: unknown) => ipcRenderer.invoke('fs:update-assignment', params),
 
   submitFiles: (params: unknown) => ipcRenderer.invoke('fs:submit-files', params),
   deleteSubmission: (submissionPath: string) => ipcRenderer.invoke('fs:delete-submission', submissionPath),

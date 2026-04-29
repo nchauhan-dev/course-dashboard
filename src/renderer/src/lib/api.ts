@@ -34,6 +34,7 @@ declare global {
         projectColor: string
       ) => Promise<IpcResult<Assignment[]>>
       createAssignment: (params: CreateAssignmentParams) => Promise<IpcResult<Assignment>>
+      updateAssignment: (params: { assignmentPath: string; name: string; due_date: string }) => Promise<IpcResult<void>>
 
       submitFiles: (params: SubmitFilesParams) => Promise<IpcResult<Submission>>
       deleteSubmission: (submissionPath: string) => Promise<IpcResult<void>>
@@ -80,6 +81,7 @@ export const api = {
   getAssignments: (projectId: string, projectPath: string, projectName: string, projectColor: string) =>
     window.api.getAssignments(projectId, projectPath, projectName, projectColor),
   createAssignment: (params: CreateAssignmentParams) => window.api.createAssignment(params),
+  updateAssignment: (params: { assignmentPath: string; name: string; due_date: string }) => window.api.updateAssignment(params),
 
   submitFiles: (params: SubmitFilesParams) => window.api.submitFiles(params),
   deleteSubmission: (submissionPath: string) => window.api.deleteSubmission(submissionPath),

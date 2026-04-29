@@ -9,6 +9,16 @@ interface Props {
   onClose: () => void
 }
 
+// Convert an ISO string to the value format datetime-local expects: "YYYY-MM-DDTHH:MM"
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso)
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0') + 'T' +
+    String(d.getHours()).padStart(2, '0') + ':' +
+    String(d.getMinutes()).padStart(2, '0')
+}
+
 export default function AssignmentModal({ projectId, assignmentId, onClose }: Props) {
   const { projects, refreshCalendar } = useApp()
   const project = projects.find((c) => c.id === projectId)
@@ -22,7 +32,14 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isDragActive, setIsDragActive] = useState(false)
 
-  useEffect(() => {
+  // Edit mode
+  const [isEditing, setIsEditing] = useState(false)
+  const [draftName, setDraftName] = useState('')
+  const [draftDueDate, setDraftDueDate] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  function fetchAssignment() {
     if (!project) return
     api.getAssignments(project.id, project.path, project.name, project.color).then((res) => {
       if (res.success && res.data) {
@@ -30,7 +47,44 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
       }
       setIsLoading(false)
     })
+  }
+
+  useEffect(() => {
+    fetchAssignment()
   }, [project, assignmentId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function startEditing() {
+    if (!assignment) return
+    setDraftName(assignment.name)
+    setDraftDueDate(assignment.due_date ? toDatetimeLocal(assignment.due_date) : '')
+    setSaveError(null)
+    setIsEditing(true)
+  }
+
+  function cancelEditing() {
+    setIsEditing(false)
+    setSaveError(null)
+  }
+
+  async function handleSave() {
+    if (!assignment || !draftName.trim() || !draftDueDate) return
+    setIsSaving(true)
+    setSaveError(null)
+    const result = await api.updateAssignment({
+      assignmentPath: assignment.path,
+      name: draftName.trim(),
+      due_date: new Date(draftDueDate).toISOString(),
+    })
+    if (!result.success) {
+      setSaveError(result.error ?? 'Failed to save')
+      setIsSaving(false)
+      return
+    }
+    setIsEditing(false)
+    setIsSaving(false)
+    fetchAssignment()
+    await refreshCalendar()
+  }
 
   // Close on Escape
   useEffect(() => {
@@ -142,37 +196,105 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
               style={{ borderBottom: '1px solid var(--color-border)', borderTop: `3px solid ${project.color}` }}
             >
               <div className="flex items-start justify-between gap-10 pr-8">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p style={{ fontSize: 11, color: 'var(--color-mute)', marginBottom: 3 }}>{project.name}</p>
-                  <h2 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--color-ink)', margin: 0, lineHeight: 1.2 }}>
-                    {assignment.name}
-                  </h2>
+                  {isEditing ? (
+                    <input
+                      autoFocus
+                      value={draftName}
+                      onChange={(e) => setDraftName(e.target.value)}
+                      style={{
+                        width: '100%', fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em',
+                        color: 'var(--color-ink)', background: 'var(--color-panel2)',
+                        border: '1px solid var(--color-border)', borderRadius: 6,
+                        padding: '3px 8px', fontFamily: 'inherit',
+                      }}
+                    />
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <h2 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--color-ink)', margin: 0, lineHeight: 1.2 }}>
+                        {assignment.name}
+                      </h2>
+                      <button
+                        onClick={startEditing}
+                        title="Edit assignment"
+                        style={{ display: 'flex', padding: 4, borderRadius: 5, color: 'var(--color-mute)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border-s)'; e.currentTarget.style.color = 'var(--color-ink2)' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--color-mute)' }}
+                      >
+                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <span className={`flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium ${statusBadge().cls}`}>
-                  {statusBadge().label}
-                </span>
+                {!isEditing && (
+                  <span className={`flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium ${statusBadge().cls}`}>
+                    {statusBadge().label}
+                  </span>
+                )}
               </div>
 
-              {due && (
-                <div className="mt-2 flex flex-wrap gap-4" style={{ fontSize: 12.5, color: 'var(--color-mute)' }}>
-                  <span>
-                    Due:{' '}
-                    <span style={{ fontWeight: 500, color: isOverdue && !hasSubmission ? 'var(--color-danger)' : 'var(--color-ink)' }}>
-                      {due.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                    </span>
-                  </span>
-                  {assignment.points > 0 && (
-                    <span>Points: <span style={{ fontWeight: 500, color: 'var(--color-ink)' }}>{assignment.points}</span></span>
+              {isEditing ? (
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--color-mute)', marginBottom: 4 }}>Due date &amp; time</label>
+                    <input
+                      type="datetime-local"
+                      value={draftDueDate}
+                      onChange={(e) => setDraftDueDate(e.target.value)}
+                      style={{
+                        fontSize: 13, color: 'var(--color-ink)', background: 'var(--color-panel2)',
+                        border: '1px solid var(--color-border)', borderRadius: 6,
+                        padding: '4px 8px', fontFamily: 'inherit',
+                      }}
+                    />
+                  </div>
+                  {saveError && (
+                    <p style={{ fontSize: 12, color: 'var(--color-danger)', margin: 0 }}>{saveError}</p>
                   )}
-                  {!isOverdue && (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={handleSave}
+                      disabled={isSaving || !draftName.trim() || !draftDueDate}
+                      className="btn-primary disabled:opacity-50"
+                      style={{ fontSize: 12, padding: '5px 14px' }}
+                    >
+                      {isSaving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={cancelEditing}
+                      className="btn-secondary"
+                      style={{ fontSize: 12, padding: '5px 14px' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                due && (
+                  <div className="mt-2 flex flex-wrap gap-4" style={{ fontSize: 12.5, color: 'var(--color-mute)' }}>
                     <span>
-                      Time left:{' '}
-                      <span style={{ fontWeight: 500, color: daysLeft <= 2 ? 'var(--color-danger)' : 'var(--color-ink)' }}>
-                        {daysLeft === 0 ? 'Due today' : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`}
+                      Due:{' '}
+                      <span style={{ fontWeight: 500, color: isOverdue && !hasSubmission ? 'var(--color-danger)' : 'var(--color-ink)' }}>
+                        {due.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                       </span>
                     </span>
-                  )}
-                </div>
+                    {assignment.points > 0 && (
+                      <span>Points: <span style={{ fontWeight: 500, color: 'var(--color-ink)' }}>{assignment.points}</span></span>
+                    )}
+                    {!isOverdue && (
+                      <span>
+                        Time left:{' '}
+                        <span style={{ fontWeight: 500, color: daysLeft <= 2 ? 'var(--color-danger)' : 'var(--color-ink)' }}>
+                          {daysLeft === 0 ? 'Due today' : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                )
               )}
             </div>
 

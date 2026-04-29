@@ -767,6 +767,21 @@ ipcMain.handle('fs:create-assignment', (_e, params: CreateAssignmentParams): Ipc
   }
 })
 
+ipcMain.handle('fs:update-assignment', (_e, params: { assignmentPath: string; name: string; due_date: string }): IpcResult<void> => {
+  const { assignmentPath, name, due_date } = params
+  const mdPath = path.join(assignmentPath, 'assignment.md')
+  if (!fs.existsSync(mdPath)) return { success: false, error: 'assignment.md not found' }
+  try {
+    const parsed = parseMdWithContent(mdPath)
+    if (!parsed) return { success: false, error: 'Failed to parse assignment.md' }
+    const { data, content } = parsed
+    writeMd(mdPath, { ...data, name, due_date }, content)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
 ipcMain.handle('fs:submit-files', async (_e, params: SubmitFilesParams): Promise<IpcResult<Submission>> => {
   const { assignmentPath, assignmentId, due_date, filePaths, notes } = params
   const submissionsDir = path.join(assignmentPath, 'submissions')
