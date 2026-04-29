@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
 import { api } from '../lib/api'
 import CalendarPanel from '../components/CalendarPanel'
 import FileTree from '../components/FileTree'
+import AssignmentModal from '../components/AssignmentModal'
 import type { Assignment } from '../../../../types/index'
 
 function countWords(text: string): number {
@@ -19,13 +20,10 @@ function formatBytes(bytes: number): string {
 
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>()
-  const { projects, calendarEvents, activeWorkspace } = useApp()
+  const { projects, calendarEvents, activeWorkspace, refreshCalendar } = useApp()
 
   const project = projects.find((c) => c.id === projectId)
 
-  // Assignments
-  const [assignments, setAssignments] = useState<Assignment[]>([])
-  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false)
   const [showNewAssignment, setShowNewAssignment] = useState(false)
 
   // New assignment form
@@ -38,7 +36,6 @@ export default function ProjectDetail() {
 
   // File tree sidebar
   const [fileTreeKey, setFileTreeKey] = useState(0)
-  const [fileSearch, setFileSearch] = useState('')
   const [creatingTopFolder, setCreatingTopFolder] = useState(false)
   const [newTopFolderName, setNewTopFolderName] = useState('')
   const [treeStats, setTreeStats] = useState<{ files: number; bytes: number } | null>(null)
@@ -46,6 +43,9 @@ export default function ProjectDetail() {
   // Activity
   const [activitySessions, setActivitySessions] = useState<{ start: string; end: string; durationMinutes: number }[]>([])
   const [projectCreatedAt, setProjectCreatedAt] = useState<string | null>(null)
+
+  // Assignment modal
+  const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null)
 
   // Notes (Description + Outcome)
   const [noteDescription, setNoteDescription] = useState('')
@@ -56,17 +56,6 @@ export default function ProjectDetail() {
   // Drop-onto-project-root
   const [isDragOver, setIsDragOver] = useState(false)
   const dragCounter = useRef(0)
-
-  useEffect(() => {
-    if (!project) return
-    setIsLoadingAssignments(true)
-    api
-      .getAssignments(project.id, project.path, project.name, project.color)
-      .then((res) => {
-        if (res.success && res.data) setAssignments(res.data)
-        setIsLoadingAssignments(false)
-      })
-  }, [project]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!project) return
@@ -129,25 +118,22 @@ export default function ProjectDetail() {
       return
     }
 
-    setAssignments((prev) => [
-      ...prev,
-      { ...result.data!, projectId: project.id, projectName: project.name, projectColor: project.color }
-    ])
     setNewName('')
     setNewDesc('')
     setNewDueDate('')
     setNewPoints('100')
     setShowNewAssignment(false)
     setIsCreating(false)
+    await refreshCalendar()
   }
 
   const projectStats = useMemo(() => {
-    const now = new Date()
-    const overdue   = assignments.filter((a) => a.submissions.length === 0 && a.due_date && new Date(a.due_date) < now).length
-    const remaining = assignments.filter((a) => a.submissions.length === 0 && a.due_date && new Date(a.due_date) >= now).length
-    const completed = assignments.filter((a) => a.submissions.length > 0).length
+    const events = calendarEvents.filter((e) => e.projectId === projectId)
+    const overdue   = events.filter((e) => !e.completed && e.isLate).length
+    const remaining = events.filter((e) => !e.completed && !e.isLate).length
+    const completed = events.filter((e) => e.completed).length
     return { overdue, remaining, completed }
-  }, [assignments])
+  }, [calendarEvents, projectId])
 
   const activityDays = useMemo(() => {
     if (!projectCreatedAt) return []
@@ -175,10 +161,6 @@ export default function ProjectDetail() {
       </div>
     )
   }
-
-  const now = new Date()
-  const upcoming = assignments.filter((a) => a.due_date && new Date(a.due_date) >= now)
-  const past = assignments.filter((a) => a.due_date && new Date(a.due_date) < now)
 
   return (
     <div className="flex w-full overflow-hidden" style={{ background: 'var(--color-bg)' }}>
@@ -399,7 +381,7 @@ export default function ProjectDetail() {
               {/* Description */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400 }}>Description</span>
+                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400, letterSpacing: '0.02em' }}>Description</span>
                   <span style={{ fontSize: 10.5, color: countWords(noteDescription) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>
                     {countWords(noteDescription)} / 100
                   </span>
@@ -427,7 +409,7 @@ export default function ProjectDetail() {
               {/* Outcome */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400 }}>Outcome</span>
+                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400, letterSpacing: '0.02em' }}>Outcome</span>
                   <span style={{ fontSize: 10.5, color: countWords(noteOutcome) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>
                     {countWords(noteOutcome)} / 100
                   </span>
@@ -477,26 +459,23 @@ export default function ProjectDetail() {
         </div>
         <div className="flex-1 overflow-y-auto no-drag" style={{ padding: '14px 16px' }}>
           <CalendarPanel
-            events={calendarEvents}
+            events={calendarEvents.filter((e) => !e.completed)}
             projectId={project.id}
-            completedEvents={assignments
-              .filter((a) => a.submissions.length > 0)
-              .map((a) => ({
-                id: a.id,
-                title: a.name,
-                due_date: a.due_date,
-                projectId: a.projectId,
-                projectName: a.projectName,
-                projectColor: a.projectColor,
-                assignmentId: a.id,
-                type: 'assignment' as const,
-                isLate: false,
-              }))}
+            onSelectAssignment={(_pid, aid) => setOpenAssignmentId(aid)}
+            completedEvents={calendarEvents.filter((e) => e.projectId === project.id && e.completed)}
           />
         </div>
       </aside>
 
       {/* ── New assignment modal ──────────────────────────────────────────────── */}
+      {openAssignmentId && (
+        <AssignmentModal
+          projectId={project.id}
+          assignmentId={openAssignmentId}
+          onClose={() => setOpenAssignmentId(null)}
+        />
+      )}
+
       {showNewAssignment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="card w-full max-w-md p-6 shadow-xl">
@@ -786,8 +765,7 @@ function ActivityChart({ days }: { days: { date: string; hours: number }[] }) {
 
 // ── Assignment row ────────────────────────────────────────────────────────────
 
-function AssignmentRow({ assignment, projectId }: { assignment: Assignment; projectId: string }) {
-  const navigate = useNavigate()
+function AssignmentRow({ assignment, onOpen }: { assignment: Assignment; projectId: string; onOpen: () => void }) {
   const due = new Date(assignment.due_date)
   const isOverdue = due < new Date()
   const hasLate = assignment.submissions.some((s) => s.is_late)
@@ -795,7 +773,7 @@ function AssignmentRow({ assignment, projectId }: { assignment: Assignment; proj
 
   return (
     <button
-      onClick={() => navigate(`/project/${projectId}/assignment/${assignment.id}`)}
+      onClick={onOpen}
       className="card w-full p-4 text-left transition-shadow hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-4">
@@ -807,19 +785,19 @@ function AssignmentRow({ assignment, projectId }: { assignment: Assignment; proj
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
           {hasSubmission && (
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${hasLate ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+            <span style={{ borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 500, background: hasLate ? 'var(--color-danger-soft)' : 'color-mix(in oklch, var(--color-success) 15%, transparent)', color: hasLate ? 'var(--color-danger)' : 'var(--color-success)' }}>
               {hasLate ? 'Late' : 'Submitted'}
             </span>
           )}
           {!hasSubmission && isOverdue && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Overdue</span>
+            <span style={{ borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 500, background: 'var(--color-danger-soft)', color: 'var(--color-danger)' }}>Overdue</span>
           )}
           {assignment.points > 0 && (
             <span className="text-xs" style={{ color: 'var(--color-mute)' }}>{assignment.points}pts</span>
           )}
         </div>
       </div>
-      <p className={`mt-2 text-xs ${isOverdue && !hasSubmission ? 'text-red-500' : ''}`} style={!isOverdue || hasSubmission ? { color: 'var(--color-mute)' } : undefined}>
+      <p className="mt-2 text-xs" style={{ color: isOverdue && !hasSubmission ? 'var(--color-danger)' : 'var(--color-mute)' }}>
         Due {due.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
       </p>
     </button>

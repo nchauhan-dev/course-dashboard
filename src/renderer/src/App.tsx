@@ -5,7 +5,7 @@ import { api } from './lib/api'
 import Setup from './pages/Setup'
 import Dashboard from './pages/Dashboard'
 import ProjectDetail from './pages/ProjectDetail'
-import AssignmentDetail from './pages/AssignmentDetail'
+
 import Archive from './pages/Archive'
 import NewProjectModal from './components/NewProjectModal'
 import SettingsModal from './components/SettingsModal'
@@ -500,10 +500,10 @@ function AppRoutes() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-gray-50">
+      <div className="flex h-full w-full items-center justify-center" style={{ background: 'var(--color-bg)' }}>
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-          <span className="text-sm text-gray-500">Loading…</span>
+          <span className="text-sm" style={{ color: 'var(--color-mute)' }}>Loading…</span>
         </div>
       </div>
     )
@@ -514,7 +514,7 @@ function AppRoutes() {
       <Route path="/setup" element={<Setup />} />
       <Route path="/dashboard" element={rootPath ? <Dashboard /> : <Navigate to="/setup" replace />} />
       <Route path="/project/:projectId" element={rootPath ? <ProjectDetail /> : <Navigate to="/setup" replace />} />
-      <Route path="/project/:projectId/assignment/:assignmentId" element={rootPath ? <AssignmentDetail /> : <Navigate to="/setup" replace />} />
+
       <Route path="/archive" element={rootPath ? <Archive /> : <Navigate to="/setup" replace />} />
       <Route path="*" element={<Navigate to={rootPath ? '/dashboard' : '/setup'} replace />} />
     </Routes>

@@ -46,14 +46,26 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
     onClose()
   }
 
+  const inputStyle: React.CSSProperties = {
+    border: '1px solid var(--color-border)',
+    background: 'var(--color-panel2)',
+    color: 'var(--color-ink)',
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block', marginBottom: 4, fontSize: 13, fontWeight: 500, color: 'var(--color-ink2)',
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="card w-full max-w-md p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">New Project</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-ink)', margin: 0 }}>New Project</h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            style={{ display: 'flex', padding: 4, borderRadius: 6, color: 'var(--color-mute)', background: 'none', border: 'none', cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -63,7 +75,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
 
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Project name</label>
+            <label style={labelStyle}>Project name</label>
             <input
               type="text"
               value={name}
@@ -71,48 +83,52 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
               placeholder="e.g. Introduction to Biology"
               required
               autoFocus
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-lg px-3 py-2 text-sm"
+              style={inputStyle}
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+            <label style={labelStyle}>Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description…"
               rows={3}
-              className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full resize-none rounded-lg px-3 py-2 text-sm"
+              style={inputStyle}
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">Color</label>
+            <label style={labelStyle}>Color</label>
             <div className="flex flex-wrap gap-2">
               {PRESET_COLORS.map((c) => (
                 <button
                   key={c}
                   type="button"
                   onClick={() => setColor(c)}
-                  className={`h-7 w-7 rounded-full transition-transform hover:scale-110 ${
-                    color === c ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : ''
-                  }`}
-                  style={{ backgroundColor: c }}
+                  style={{
+                    width: 28, height: 28, borderRadius: '50%', backgroundColor: c,
+                    border: 'none', cursor: 'pointer', flexShrink: 0, transition: 'transform 0.1s',
+                    transform: color === c ? 'scale(1.15)' : undefined,
+                    boxShadow: color === c ? `inset 0 0 0 2px white, 0 0 0 2px ${c}` : undefined,
+                  }}
                 />
               ))}
             </div>
           </div>
 
           {/* Preview */}
-          <div className="rounded-lg border border-gray-200 p-3 flex items-center gap-3">
-            <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-            <span className="text-sm font-medium text-gray-800 truncate">
+          <div style={{ borderRadius: 8, border: '1px solid var(--color-border)', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: color, flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {name || 'Project name'}
             </span>
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+            <div style={{ borderRadius: 8, padding: '10px 12px', fontSize: 13, background: 'var(--color-danger-soft)', color: 'var(--color-danger)' }}>{error}</div>
           )}
 
           <div className="flex gap-3 pt-1">

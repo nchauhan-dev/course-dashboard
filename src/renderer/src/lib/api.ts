@@ -38,11 +38,10 @@ declare global {
       submitFiles: (params: SubmitFilesParams) => Promise<IpcResult<Submission>>
       deleteSubmission: (submissionPath: string) => Promise<IpcResult<void>>
 
-      getCalendarEvents: (
-        rootPath: string,
-        startDate: string,
-        endDate: string
-      ) => Promise<IpcResult<CalendarEvent[]>>
+      getCalendarEvents: (rootPath: string) => Promise<IpcResult<CalendarEvent[]>>
+
+      getTheme: () => Promise<IpcResult<string>>
+      setTheme: (theme: string) => Promise<IpcResult<void>>
 
       getActivity: (projectPath: string) => Promise<IpcResult<{ start: string; end: string; durationMinutes: number }[]>>
       getProjectMeta: (projectPath: string) => Promise<IpcResult<{ createdAt: string }>>
@@ -85,8 +84,10 @@ export const api = {
   submitFiles: (params: SubmitFilesParams) => window.api.submitFiles(params),
   deleteSubmission: (submissionPath: string) => window.api.deleteSubmission(submissionPath),
 
-  getCalendarEvents: (rootPath: string, startDate: string, endDate: string) =>
-    window.api.getCalendarEvents(rootPath, startDate, endDate),
+  getCalendarEvents: (rootPath: string) => window.api.getCalendarEvents(rootPath),
+
+  getTheme: () => window.api.getTheme(),
+  setTheme: (theme: string) => window.api.setTheme(theme),
 
   getActivity: (projectPath: string) => window.api.getActivity(projectPath),
   getProjectMeta: (projectPath: string) => window.api.getProjectMeta(projectPath),

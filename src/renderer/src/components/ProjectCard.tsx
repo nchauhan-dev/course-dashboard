@@ -10,9 +10,10 @@ export default function ProjectCard({ project }: Props) {
   const navigate = useNavigate()
   const { calendarEvents } = useApp()
 
-  const overdue = calendarEvents.filter((e) => e.projectId === project.id && e.isLate).length
-  const upcoming = calendarEvents.filter((e) => e.projectId === project.id && !e.isLate).length
-  const nextTask = calendarEvents.find((e) => e.projectId === project.id && !e.isLate)
+  const projectEvents = calendarEvents.filter((e) => e.projectId === project.id && !e.completed)
+  const overdue  = projectEvents.filter((e) => e.isLate).length
+  const upcoming = projectEvents.filter((e) => !e.isLate).length
+  const nextTask = projectEvents.find((e) => !e.isLate)
 
   return (
     <div

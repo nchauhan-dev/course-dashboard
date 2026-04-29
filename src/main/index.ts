@@ -560,6 +560,32 @@ ipcMain.handle('app:find-existing-config', (): IpcResult<AppConfig> => {
   return { success: false }
 })
 
+ipcMain.handle('config:get-theme', (): IpcResult<string> => {
+  const configPath = getConfigPath()
+  if (!fs.existsSync(configPath)) return { success: true, data: 'light' }
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as AppConfig
+    return { success: true, data: config.theme ?? 'light' }
+  } catch {
+    return { success: true, data: 'light' }
+  }
+})
+
+ipcMain.handle('config:set-theme', (_e, theme: string): IpcResult<void> => {
+  try {
+    const configPath = getConfigPath()
+    let config: Partial<AppConfig> = {}
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as AppConfig
+    } catch { /* no existing config yet */ }
+    config.theme = theme as 'light' | 'dark'
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
 ipcMain.handle('fs:get-workspaces', (_e, rootPath: string): IpcResult<string[]> => {
   if (!fs.existsSync(rootPath)) return { success: false, error: 'Root path does not exist' }
   try {
@@ -808,11 +834,10 @@ ipcMain.handle('fs:delete-submission', (_e, submissionPath: string): IpcResult<v
 
 ipcMain.handle(
   'fs:get-calendar-events',
-  (_e, rootPath: string, startDate: string, endDate: string): IpcResult<CalendarEvent[]> => {
+  (_e, rootPath: string): IpcResult<CalendarEvent[]> => {
     if (!fs.existsSync(rootPath)) return { success: false, error: 'Root path does not exist' }
     try {
-      const start = new Date(startDate)
-      const end = new Date(endDate)
+      const now = new Date()
       const entries = fs.readdirSync(rootPath, { withFileTypes: true })
       const events: CalendarEvent[] = []
 
@@ -828,25 +853,30 @@ ipcMain.handle(
         const projectName = String(projectData.name ?? entry.name)
         const projectColor = String(projectData.color ?? '#6366f1')
 
+        const todayStr = now.getFullYear() + '-' +
+          String(now.getMonth() + 1).padStart(2, '0') + '-' +
+          String(now.getDate()).padStart(2, '0')
         const assignments = getAssignmentsForProject(projectPath, projectId, projectName, projectColor)
         for (const assignment of assignments) {
           if (!assignment.due_date) continue
-          const dueDate = new Date(assignment.due_date)
-          // Include if within the requested window OR if overdue with no submission
-          const isLate = assignment.submissions.length === 0 && dueDate < new Date()
-          if (dueDate >= start && dueDate <= end || isLate) {
-            events.push({
-              id: assignment.id,
-              title: assignment.name,
-              due_date: assignment.due_date,
-              projectId,
-              projectName,
-              projectColor,
-              assignmentId: assignment.id,
-              type: 'assignment',
-              isLate
-            })
-          }
+          const completed = assignment.submissions.length > 0
+          const dueLocal = new Date(assignment.due_date)
+          const dueDateStr = dueLocal.getFullYear() + '-' +
+            String(dueLocal.getMonth() + 1).padStart(2, '0') + '-' +
+            String(dueLocal.getDate()).padStart(2, '0')
+          const isLate = !completed && dueDateStr < todayStr
+          events.push({
+            id: assignment.id,
+            title: assignment.name,
+            due_date: assignment.due_date,
+            projectId,
+            projectName,
+            projectColor,
+            assignmentId: assignment.id,
+            type: 'assignment',
+            completed,
+            isLate
+          })
         }
       }
 

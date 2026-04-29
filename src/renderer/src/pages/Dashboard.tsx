@@ -3,15 +3,19 @@ import { useApp } from '../store/AppContext'
 import ProjectCard from '../components/ProjectCard'
 import CalendarPanel from '../components/CalendarPanel'
 import NewProjectModal from '../components/NewProjectModal'
+import AssignmentModal from '../components/AssignmentModal'
 
-// Stat helpers
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+// Stat helpers — local time so date boundaries match the user's clock
+function localDate(d: Date): string {
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0')
 }
+function todayStr() { return localDate(new Date()) }
 function weekEndStr() {
   const d = new Date()
   d.setDate(d.getDate() + 7)
-  return d.toISOString().slice(0, 10)
+  return localDate(d)
 }
 
 // Format today's date as "THURSDAY, APRIL 23"
@@ -23,17 +27,19 @@ function formatDateLabel() {
 export default function Dashboard() {
   const { projects, calendarEvents, userName, activeWorkspace } = useApp()
   const [showNewProject, setShowNewProject] = useState(false)
+  const [openAssignment, setOpenAssignment] = useState<{ projectId: string; assignmentId: string } | null>(null)
 
   const stats = useMemo(() => {
     const today = todayStr()
     const weekEnd = weekEndStr()
-    const overdue = calendarEvents.filter((e) => e.isLate).length
-    const dueToday = calendarEvents.filter((e) => !e.isLate && e.due_date.slice(0, 10) === today).length
-    const thisWeek = calendarEvents.filter((e) => {
-      const d = e.due_date.slice(0, 10)
+    const active = calendarEvents.filter((e) => !e.completed)
+    const overdue  = active.filter((e) => e.isLate).length
+    const dueToday = active.filter((e) => !e.isLate && localDate(new Date(e.due_date)) === today).length
+    const thisWeek = active.filter((e) => {
+      const d = localDate(new Date(e.due_date))
       return !e.isLate && d > today && d <= weekEnd
     }).length
-    const total = calendarEvents.length
+    const total = active.length
     return { overdue, dueToday, thisWeek, total }
   }, [calendarEvents])
 
@@ -120,6 +126,7 @@ export default function Dashboard() {
                 margin: 0,
                 fontFamily: '"Instrument Serif", Georgia, serif',
                 fontSize: 14.5, lineHeight: 1.5, color: 'var(--color-ink2)',
+                letterSpacing: '0.02em',
               }}>
                 "It's not what we do once in a while that shapes our lives. It's what we do consistently."
               </blockquote>
@@ -178,12 +185,23 @@ export default function Dashboard() {
           <span className="no-drag" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink)' }}>Calendar</span>
         </div>
         <div className="flex-1 overflow-y-auto no-drag" style={{ padding: '14px 16px' }}>
-          <CalendarPanel events={calendarEvents} />
+          <CalendarPanel
+            events={calendarEvents.filter((e) => !e.completed)}
+            onSelectAssignment={(pid, aid) => setOpenAssignment({ projectId: pid, assignmentId: aid })}
+          />
         </div>
       </aside>
 
       {showNewProject && (
         <NewProjectModal onClose={() => setShowNewProject(false)} />
+      )}
+
+      {openAssignment && (
+        <AssignmentModal
+          projectId={openAssignment.projectId}
+          assignmentId={openAssignment.assignmentId}
+          onClose={() => setOpenAssignment(null)}
+        />
       )}
     </div>
   )

@@ -6,6 +6,7 @@ interface Props {
   events: CalendarEvent[]
   projectId?: string
   completedEvents?: CalendarEvent[]
+  onSelectAssignment?: (projectId: string, assignmentId: string) => void
 }
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -14,7 +15,7 @@ const MONTHS = [
   'July','August','September','October','November','December'
 ]
 
-export default function CalendarPanel({ events, projectId, completedEvents = [] }: Props) {
+export default function CalendarPanel({ events, projectId, completedEvents = [], onSelectAssignment }: Props) {
   const navigate = useNavigate()
   const today = useMemo(() => new Date(), [])
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
@@ -27,7 +28,10 @@ export default function CalendarPanel({ events, projectId, completedEvents = [] 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>()
     for (const ev of filtered) {
-      const key = ev.due_date.slice(0, 10)
+      const d = new Date(ev.due_date)
+      const key = d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0')
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(ev)
     }
@@ -50,12 +54,16 @@ export default function CalendarPanel({ events, projectId, completedEvents = [] 
     return year === today.getFullYear() && month === today.getMonth() && d === today.getDate()
   }
 
-  // Classify upcoming events by status
-  const todayStr = today.toISOString().slice(0, 10)
+  // Classify upcoming events by status — all in local time
+  const todayStr = today.getFullYear() + '-' +
+    String(today.getMonth() + 1).padStart(2, '0') + '-' +
+    String(today.getDate()).padStart(2, '0')
   const weekEnd = useMemo(() => {
     const d = new Date(today)
     d.setDate(d.getDate() + 7)
-    return d.toISOString().slice(0, 10)
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0')
   }, [today])
 
   const grouped = useMemo(() => {
@@ -64,7 +72,10 @@ export default function CalendarPanel({ events, projectId, completedEvents = [] 
     const later: CalendarEvent[] = []
     for (const ev of filtered) {
       if (ev.isLate) { overdue.push(ev); continue }
-      const d = ev.due_date.slice(0, 10)
+      const dl = new Date(ev.due_date)
+      const d = dl.getFullYear() + '-' +
+        String(dl.getMonth() + 1).padStart(2, '0') + '-' +
+        String(dl.getDate()).padStart(2, '0')
       if (d === todayStr) { dueToday.push(ev); continue }
       later.push(ev)
     }
@@ -165,23 +176,24 @@ export default function CalendarPanel({ events, projectId, completedEvents = [] 
           <span style={{ fontSize: 11, color: 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>{totalUpcoming}</span>
         </div>
 
-        <UpcomingGroup label="Completed" tone="success" events={completedEvents} projectId={projectId} navigate={navigate} />
-        <UpcomingGroup label="Overdue"   tone="danger"  events={grouped.overdue}  projectId={projectId} navigate={navigate} />
-        <UpcomingGroup label="Today"   tone="today"  events={grouped.dueToday} projectId={projectId} navigate={navigate} />
-        <UpcomingGroup label="Later"   tone="mute"   events={grouped.later}    projectId={projectId} navigate={navigate} />
+        <UpcomingGroup label="Completed" tone="success" events={completedEvents}  projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
+        <UpcomingGroup label="Overdue"   tone="danger"  events={grouped.overdue}  projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
+        <UpcomingGroup label="Today"     tone="today"   events={grouped.dueToday} projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
+        <UpcomingGroup label="Later"     tone="mute"    events={grouped.later}    projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
       </div>
     </div>
   )
 }
 
 function UpcomingGroup({
-  label, tone, events, projectId, navigate
+  label, tone, events, projectId, navigate, onSelectAssignment
 }: {
   label: string
   tone: 'success' | 'danger' | 'today' | 'mute'
   events: CalendarEvent[]
   projectId?: string
   navigate: ReturnType<typeof useNavigate>
+  onSelectAssignment?: (projectId: string, assignmentId: string) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const dotColor = tone === 'success' ? 'var(--color-success)' : tone === 'danger' ? 'var(--color-danger)' : tone === 'today' ? 'var(--accent)' : 'var(--color-mute)'
@@ -238,7 +250,10 @@ function UpcomingGroup({
               return (
                 <button
                   key={ev.id}
-                  onClick={() => navigate(`/project/${ev.projectId}/assignment/${ev.assignmentId}`)}
+                  onClick={() => onSelectAssignment
+                    ? onSelectAssignment(ev.projectId, ev.assignmentId)
+                    : navigate(`/project/${ev.projectId}/assignment/${ev.assignmentId}`)
+                  }
                   style={{ display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%' }}
                 >
                   {/* Check circle */}

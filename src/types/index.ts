@@ -44,6 +44,7 @@ export interface CalendarEvent {
   projectColor: string
   assignmentId: string
   type: 'assignment'
+  completed: boolean
   isLate: boolean
 }
 
@@ -53,6 +54,7 @@ export interface AppConfig {
   activeWorkspace: string
   accentColor?: string
   userName?: string
+  theme?: 'light' | 'dark'
 }
 
 export interface CreateProjectParams {

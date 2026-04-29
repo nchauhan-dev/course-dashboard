@@ -21,8 +21,11 @@ contextBridge.exposeInMainWorld('api', {
   submitFiles: (params: unknown) => ipcRenderer.invoke('fs:submit-files', params),
   deleteSubmission: (submissionPath: string) => ipcRenderer.invoke('fs:delete-submission', submissionPath),
 
-  getCalendarEvents: (rootPath: string, startDate: string, endDate: string) =>
-    ipcRenderer.invoke('fs:get-calendar-events', rootPath, startDate, endDate),
+  getCalendarEvents: (rootPath: string) =>
+    ipcRenderer.invoke('fs:get-calendar-events', rootPath),
+
+  getTheme: () => ipcRenderer.invoke('config:get-theme'),
+  setTheme: (theme: string) => ipcRenderer.invoke('config:set-theme', theme),
 
   getActivity: (projectPath: string) => ipcRenderer.invoke('fs:get-activity', projectPath),
   getProjectMeta: (projectPath: string) => ipcRenderer.invoke('fs:get-project-meta', projectPath),

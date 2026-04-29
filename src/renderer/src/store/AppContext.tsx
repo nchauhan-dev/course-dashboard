@@ -53,11 +53,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshCalendar = useCallback(async () => {
     if (!workspacePath) return
-    const start = new Date()
-    const end = new Date()
-    end.setDate(end.getDate() + 60)
-    const result = await api.getCalendarEvents(workspacePath, start.toISOString(), end.toISOString())
-    console.log('[AppContext] refreshCalendar raw result:', result.data)
+    const result = await api.getCalendarEvents(workspacePath)
     if (result.success && result.data) {
       setState((prev) => ({ ...prev, calendarEvents: result.data! }))
     }
@@ -100,6 +96,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (config.accentColor) {
           document.documentElement.style.setProperty('--accent', config.accentColor)
         }
+        if (config.theme === 'dark') {
+          document.documentElement.dataset.theme = 'dark'
+        } else {
+          delete document.documentElement.dataset.theme
+        }
         setState((prev) => ({
           ...prev,
           rootPath: config.rootPath,
@@ -119,13 +120,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, isLoading: true }))
     Promise.all([
       api.getProjects(workspacePath),
-      api.getCalendarEvents(
-        workspacePath,
-        new Date().toISOString(),
-        (() => { const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString() })()
-      )
+      api.getCalendarEvents(workspacePath)
     ]).then(([projectsResult, eventsResult]) => {
-      console.log('[AppContext] initial load raw events:', eventsResult.data)
       setState((prev) => ({
         ...prev,
         isLoading: false,
