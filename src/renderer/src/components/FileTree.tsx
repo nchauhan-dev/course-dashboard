@@ -255,7 +255,8 @@ function TreeNodeRow({
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => setIsRenaming(false)}
             onKeyDown={(e) => { if (e.key === 'Escape') setIsRenaming(false) }}
-            className="flex-1 min-w-0 rounded border border-gray-300 px-2 py-1 text-sm"
+            className="form-input flex-1 min-w-0 rounded border px-2 py-1 text-sm"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
           />
         </form>
         {node.isDirectory && expanded && (
@@ -490,7 +491,8 @@ function TreeNodeRow({
                   onChange={(e) => setNewFolderName(e.target.value)}
                   onBlur={cancelCreate}
                   onKeyDown={(e) => { if (e.key === 'Escape') cancelCreate() }}
-                  className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                  className="form-input w-full rounded border px-2 py-1 text-sm"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                   placeholder="Folder name"
                 />
               </form>

@@ -168,10 +168,12 @@ function AppSidebar() {
             <button
               onClick={() => setCollapsed(false)}
               title="Expand sidebar"
-              className="rounded-md p-1.5 transition-colors"
-              style={{ color: 'var(--color-mute)' }}
+              className="rounded-md p-1.5"
+              style={{ color: 'var(--color-mute)', transition: 'background-color 120ms ease, transform 120ms ease' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
+              onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -203,10 +205,12 @@ function AppSidebar() {
               <span className="flex-1 truncate text-sm font-semibold" style={{ color: 'var(--color-ink)', letterSpacing: '-0.02em' }}>Coursework</span>
               <button
                 onClick={() => setCollapsed(true)}
-                className="rounded-md p-1 transition-colors flex-shrink-0"
-                style={{ color: 'var(--color-mute)' }}
+                className="rounded-md p-1 flex-shrink-0"
+                style={{ color: 'var(--color-mute)', transition: 'background-color 120ms ease, transform 120ms ease' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
+                onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -218,8 +222,11 @@ function AppSidebar() {
             <div className="relative mb-2 no-drag" ref={workspaceMenuRef}>
               <button
                 onClick={() => { setShowWorkspaceMenu((v) => !v); setShowNewWorkspace(false) }}
-                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors"
-                style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)', color: 'var(--color-ink2)' }}
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs"
+                style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)', color: 'var(--color-ink2)', transition: 'background-color 120ms ease, transform 120ms ease' }}
+                onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
+                onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
               >
                 <span className="truncate font-medium">
                   {activeWorkspace || 'No workspace'}
@@ -257,7 +264,7 @@ function AppSidebar() {
                         onChange={(e) => setNewWorkspaceName(e.target.value)}
                         placeholder="Workspace name…"
                         autoFocus
-                        className="mb-1.5 w-full rounded-md px-2 py-1 text-xs"
+                        className="form-input mb-1.5 w-full rounded-md px-2 py-1 text-xs"
                         style={{ border: '1px solid var(--color-border)', background: 'var(--color-panel2)' }}
                       />
                       <div className="flex gap-1.5">
@@ -339,12 +346,21 @@ function AppSidebar() {
                             {project.name}
                           </span>
                         )}
-                        {isHov && !isRenaming && (
+                        {!isRenaming && (
                           <button
                             onClick={(e) => openProjectMenu(e, project.id)}
-                            style={{ display: 'flex', padding: 2, borderRadius: 3, color: 'var(--color-mute)', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              width: 22, height: 22, borderRadius: 4,
+                              color: 'var(--color-mute)', background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0,
+                              opacity: isHov ? 1 : 0,
+                              pointerEvents: isHov ? 'auto' : 'none',
+                              transition: 'background-color 120ms ease, transform 120ms ease',
+                            }}
                             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border)')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)' }}
+                            onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.85)')}
+                            onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                           >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                               <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
@@ -384,10 +400,17 @@ function AppSidebar() {
                   {userName || 'User'}
                 </span>
                 <button ref={userMenuBtnRef} onClick={openUserMenu}
-                  className="rounded p-0.5 flex-shrink-0 transition-colors"
-                  style={{ color: 'var(--color-mute)' }}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 22, height: 22, borderRadius: 4, flexShrink: 0,
+                    color: 'var(--color-mute)', border: 'none', cursor: 'pointer', background: 'transparent',
+                    transition: 'background-color 120ms ease, transform 120ms ease',
+                  }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)' }}
+                  onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.85)')}
+                  onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+                >
                   <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>

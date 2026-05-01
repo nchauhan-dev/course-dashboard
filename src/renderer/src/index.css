@@ -46,12 +46,16 @@
     padding: 0;
   }
 
+  html {
+    /* Font smoothing on the root so it cascades everywhere */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     background: var(--color-bg);
     color: var(--color-ink);
     font-family: "Geist", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
     user-select: none;
     -webkit-user-select: none;
   }
@@ -61,16 +65,30 @@
     user-select: text;
     -webkit-user-select: text;
   }
+
+  /* Text wrap: balanced headings, smart orphan removal on body copy */
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none;
+    @apply inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg focus:outline-none;
     background: var(--color-ink);
     color: var(--color-bg);
+    transition-property: filter, transform;
+    transition-duration: 120ms;
+    transition-timing-function: ease;
   }
   .btn-primary:hover {
     filter: brightness(1.15);
+  }
+  .btn-primary:active {
+    transform: scale(0.96);
   }
   .btn-primary:focus-visible {
     outline: 2px solid var(--accent);
@@ -78,23 +96,36 @@
   }
 
   .btn-accent {
-    @apply inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors focus:outline-none;
+    @apply inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg focus:outline-none;
     background-color: var(--accent);
+    transition-property: filter, transform;
+    transition-duration: 120ms;
+    transition-timing-function: ease;
   }
   .btn-accent:hover { filter: brightness(0.9); }
+  .btn-accent:active { transform: scale(0.96); }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors focus:outline-none;
+    @apply inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border focus:outline-none;
     background: var(--color-panel);
     color: var(--color-ink2);
     border-color: var(--color-border);
+    transition-property: background-color, transform;
+    transition-duration: 120ms;
+    transition-timing-function: ease;
   }
   .btn-secondary:hover { background: var(--color-panel2); }
+  .btn-secondary:active { transform: scale(0.96); }
   .btn-secondary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .btn-danger {
-    @apply inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors;
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg;
+    transition-property: background-color, transform;
+    transition-duration: 120ms;
+    transition-timing-function: ease;
   }
+  .btn-danger:hover { background-color: #dc2626; }
+  .btn-danger:active { transform: scale(0.96); }
 
   .card {
     @apply rounded-xl border shadow-sm;
@@ -104,17 +135,39 @@
 
   .project-card {
     background: var(--color-panel);
+    /* Same fix: background-color only in transition — no transform in the list
+       to avoid compositor-layer promotion causing text shift on hover */
+    transition-property: background-color;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
+    transform-origin: center;
   }
   .project-card:hover {
     background: var(--color-border-s);
   }
+  .project-card:active {
+    transform: scale(0.98);
+  }
 
   .sidebar-item {
-    @apply flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors;
+    @apply flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm font-medium cursor-pointer;
     color: var(--color-ink);
+    /* Only transition background-color — including transform in the list
+       promotes every item to a compositor layer even at rest, which causes
+       sub-pixel text rendering differences that read as a 1px downward shift. */
+    transition-property: background-color;
+    transition-duration: 120ms;
+    transition-timing-function: ease;
+    /* Explicit origin so any active-state scale anchors to the element center */
+    transform-origin: center;
   }
   .sidebar-item:hover {
+    /* Background only — zero layout-affecting properties (no border, padding, margin) */
     background: var(--color-border-s);
+  }
+  .sidebar-item:active {
+    /* Snap scale — no animation needed for press feel; snap-back is instant too */
+    transform: scale(0.97);
   }
   .sidebar-item.active {
     background: var(--color-panel);
@@ -122,12 +175,36 @@
   }
 }
 
-/* Focus ring for inputs */
+@layer utilities {
+  /* Prevent layout shift on dynamic number displays */
+  .num-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Staggered sidebar list-item entrance */
+@keyframes sidebar-fade-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Remove browser default outlines globally */
 input:focus,
 textarea:focus {
   outline: none !important;
+}
+
+/* Accent focus ring — apply only to structured form fields */
+.form-input:focus {
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 1px var(--accent) !important;
+}
+
+/* Search input — suppress focus decoration (handled by wrapper border) */
+.search-input:focus {
+  outline: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
 /* Invisible inline textareas (project notes) */

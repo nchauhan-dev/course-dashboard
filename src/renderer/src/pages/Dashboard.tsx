@@ -4,6 +4,7 @@ import ProjectCard from '../components/ProjectCard'
 import CalendarPanel from '../components/CalendarPanel'
 import NewProjectModal from '../components/NewProjectModal'
 import AssignmentModal from '../components/AssignmentModal'
+import Header from '../components/Header'
 
 // Stat helpers — local time so date boundaries match the user's clock
 function localDate(d: Date): string {
@@ -25,7 +26,7 @@ function formatDateLabel() {
 }
 
 export default function Dashboard() {
-  const { projects, calendarEvents, userName, activeWorkspace } = useApp()
+  const { projects, calendarEvents, userName } = useApp()
   const [showNewProject, setShowNewProject] = useState(false)
   const [openAssignment, setOpenAssignment] = useState<{ projectId: string; assignmentId: string } | null>(null)
 
@@ -51,35 +52,7 @@ export default function Dashboard() {
       {/* Main */}
       <main className="flex flex-1 flex-col overflow-hidden min-w-0">
 
-        {/* Linear-style breadcrumb header */}
-        <header
-          className="drag-region flex flex-shrink-0 items-center gap-2.5 px-5"
-          style={{ height: 44, borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
-        >
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 no-drag" style={{ fontSize: 12, color: 'var(--color-mute)' }}>
-            <span>{activeWorkspace || 'Workspace'}</span>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-              <path d="m9 6 6 6-6 6" />
-            </svg>
-            <span className="font-medium" style={{ color: 'var(--color-ink)' }}>Dashboard</span>
-          </div>
-
-          <div style={{ flex: 1 }} />
-
-          {/* Search */}
-          <div
-            className="no-drag flex items-center gap-2 rounded-md px-2.5 py-1.5"
-            style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)', fontSize: 11.5, color: 'var(--color-mute)', minWidth: 200 }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
-            </svg>
-            <span>Search files, tasks, projects…</span>
-            <span style={{ marginLeft: 'auto', fontFamily: '"Geist Mono", monospace', fontSize: 10, color: 'var(--color-mute)' }}>⌘K</span>
-          </div>
-
-        </header>
+        <Header />
 
         {/* Stat strip */}
         <div
@@ -101,7 +74,7 @@ export default function Dashboard() {
               }}
             >
               <div style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--color-mute)', fontWeight: 500, textTransform: 'uppercase' }}>{s.label}</div>
-              <div style={{ fontSize: 24, fontWeight: 500, color: s.color, letterSpacing: '-0.04em', lineHeight: 1 }}>{s.value}</div>
+              <div style={{ fontSize: 24, fontWeight: 500, color: s.color, letterSpacing: '-0.04em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
             </div>
           ))}
         </div>

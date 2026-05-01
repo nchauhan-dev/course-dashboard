@@ -99,7 +99,7 @@ export default function Setup() {
           </p>
           <form onSubmit={handleCreateWorkspace} className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Workspace name</label>
+              <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--color-ink2)' }}>Workspace name</label>
               <input
                 type="text"
                 value={workspaceName}
@@ -107,7 +107,8 @@ export default function Setup() {
                 required
                 autoFocus
                 placeholder="e.g. Spring 2026"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="form-input w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
               />
             </div>
             {error && (

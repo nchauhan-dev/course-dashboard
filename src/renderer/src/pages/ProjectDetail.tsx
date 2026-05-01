@@ -5,6 +5,7 @@ import { api } from '../lib/api'
 import CalendarPanel from '../components/CalendarPanel'
 import FileTree from '../components/FileTree'
 import AssignmentModal from '../components/AssignmentModal'
+import Header from '../components/Header'
 import type { Assignment } from '../../../../types/index'
 
 function countWords(text: string): number {
@@ -169,34 +170,7 @@ export default function ProjectDetail() {
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
       {/* ── Unified header ───────────────────────────────────────────────────── */}
-      <header
-        className="drag-region flex flex-shrink-0 items-center gap-2.5 px-5"
-        style={{ height: 44, borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
-      >
-        <div className="flex items-center gap-1.5 no-drag" style={{ fontSize: 12, color: 'var(--color-mute)' }}>
-          <span>{activeWorkspace || 'Workspace'}</span>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-          <span>Projects</span>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-          <span className="font-medium" style={{ color: 'var(--color-ink)' }}>{project.name}</span>
-        </div>
-        <div style={{ flex: 1 }} />
-        {/* Search — scoped to project.path */}
-        <div
-          className="no-drag flex items-center gap-2 rounded-md px-2.5 py-1.5"
-          style={{ background: 'var(--color-panel)', border: '1px solid var(--color-border)', fontSize: 11.5, color: 'var(--color-mute)', minWidth: 200 }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
-          </svg>
-          <span>Search files, tasks…</span>
-          <span style={{ marginLeft: 'auto', fontFamily: '"Geist Mono", monospace', fontSize: 10, color: 'var(--color-mute)' }}>⌘K</span>
-        </div>
-      </header>
+      <Header />
 
       {/* ── Columns ───────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -216,9 +190,16 @@ export default function ProjectDetail() {
           </span>
           <button
             onClick={() => { setCreatingTopFolder(true); setNewTopFolderName('') }}
-            style={{ display: 'flex', padding: 3, borderRadius: 4, color: 'var(--color-mute)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 26, height: 26, borderRadius: 5,
+              color: 'var(--color-mute)', background: 'transparent', border: 'none', cursor: 'pointer',
+              transition: 'background-color 120ms ease, transform 120ms ease',
+            }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)' }}
+            onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
+            onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
             title="New folder"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -321,7 +302,12 @@ export default function ProjectDetail() {
                 background: 'var(--color-ink)', color: 'var(--color-bg)',
                 border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, marginTop: 2,
+                transition: 'filter 120ms ease, transform 120ms ease',
               }}
+              onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.15)')}
+              onMouseLeave={e => (e.currentTarget.style.filter = '')}
+              onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.96)')}
+              onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 5v14M5 12h14" />
@@ -349,7 +335,7 @@ export default function ProjectDetail() {
                 }}
               >
                 <div style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--color-mute)', fontWeight: 500, textTransform: 'uppercase' }}>{s.label}</div>
-                <div style={{ fontSize: 24, fontWeight: 500, color: s.color, letterSpacing: '-0.04em', lineHeight: 1 }}>{s.value}</div>
+                <div style={{ fontSize: 24, fontWeight: 500, color: s.color, letterSpacing: '-0.04em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
               </div>
             ))}
           </div>
@@ -370,7 +356,7 @@ export default function ProjectDetail() {
                   <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
                     <span style={{ fontSize: 11.5, color: 'var(--color-ink2)', flex: 1 }}>{item.label}</span>
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--color-ink)', fontFamily: '"Geist Mono", monospace' }}>{item.value}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--color-ink)', fontFamily: '"Geist Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -382,7 +368,7 @@ export default function ProjectDetail() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400, letterSpacing: '0.02em' }}>Description</span>
-                  <span style={{ fontSize: 10.5, color: countWords(noteDescription) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>
+                  <span style={{ fontSize: 10.5, color: countWords(noteDescription) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
                     {countWords(noteDescription)} / 100
                   </span>
                 </div>
@@ -410,7 +396,7 @@ export default function ProjectDetail() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400, letterSpacing: '0.02em' }}>Outcome</span>
-                  <span style={{ fontSize: 10.5, color: countWords(noteOutcome) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>
+                  <span style={{ fontSize: 10.5, color: countWords(noteOutcome) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
                     {countWords(noteOutcome)} / 100
                   </span>
                 </div>
@@ -483,9 +469,16 @@ export default function ProjectDetail() {
               <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-ink)', margin: 0 }}>New Assignment</h2>
               <button
                 onClick={() => setShowNewAssignment(false)}
-                style={{ display: 'flex', padding: 4, borderRadius: 6, color: 'var(--color-mute)', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 28, height: 28, borderRadius: 7,
+                  color: 'var(--color-mute)', background: 'none', border: 'none', cursor: 'pointer',
+                  transition: 'background-color 120ms ease, transform 120ms ease',
+                }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-panel2)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.transform = 'scale(1)' }}
+                onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
+                onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M18 6 6 18M6 6l12 12" />
@@ -501,7 +494,7 @@ export default function ProjectDetail() {
                   onChange={(e) => setNewName(e.target.value)}
                   required
                   autoFocus
-                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  className="form-input w-full rounded-lg border px-3 py-2 text-sm"
                   style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                 />
               </div>
@@ -511,7 +504,7 @@ export default function ProjectDetail() {
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
                   rows={2}
-                  className="w-full resize-none rounded-lg border px-3 py-2 text-sm"
+                  className="form-input w-full resize-none rounded-lg border px-3 py-2 text-sm"
                   style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                 />
               </div>
@@ -523,7 +516,7 @@ export default function ProjectDetail() {
                     value={newDueDate}
                     onChange={(e) => setNewDueDate(e.target.value)}
                     required
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    className="form-input w-full rounded-lg border px-3 py-2 text-sm"
                     style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                   />
                 </div>
@@ -534,7 +527,7 @@ export default function ProjectDetail() {
                     value={newPoints}
                     onChange={(e) => setNewPoints(e.target.value)}
                     min={0}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    className="form-input w-full rounded-lg border px-3 py-2 text-sm"
                     style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                   />
                 </div>
@@ -621,7 +614,7 @@ function DonutChart({ overdue, remaining, completed }: { overdue: number; remain
       )}
       {/* Center: percentage */}
       <text x={cx} y={cy - 7} textAnchor="middle"
-        style={{ fontSize: 20, fontWeight: 700, fill: 'var(--color-ink)', fontFamily: 'inherit', letterSpacing: '-0.04em' }}>
+        style={{ fontSize: 20, fontWeight: 700, fill: 'var(--color-ink)', fontFamily: 'inherit', letterSpacing: '-0.04em', fontVariantNumeric: 'tabular-nums' }}>
         {pct}%
       </text>
       <text x={cx} y={cy + 11} textAnchor="middle"
@@ -774,7 +767,12 @@ function AssignmentRow({ assignment, onOpen }: { assignment: Assignment; project
   return (
     <button
       onClick={onOpen}
-      className="card w-full p-4 text-left transition-shadow hover:shadow-md"
+      className="card w-full p-4 text-left"
+      style={{ transition: 'box-shadow 150ms ease, transform 120ms ease' }}
+      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)')}
+      onMouseLeave={e => (e.currentTarget.style.boxShadow = '')}
+      onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.99)')}
+      onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">

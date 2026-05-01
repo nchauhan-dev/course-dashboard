@@ -70,20 +70,24 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
     if (!assignment || !draftName.trim() || !draftDueDate) return
     setIsSaving(true)
     setSaveError(null)
-    const result = await api.updateAssignment({
-      assignmentPath: assignment.path,
-      name: draftName.trim(),
-      due_date: new Date(draftDueDate).toISOString(),
-    })
-    if (!result.success) {
-      setSaveError(result.error ?? 'Failed to save')
+    try {
+      const result = await api.updateAssignment({
+        assignmentPath: assignment.path,
+        name: draftName.trim(),
+        due_date: new Date(draftDueDate).toISOString(),
+      })
+      if (!result.success) {
+        setSaveError(result.error ?? 'Failed to save')
+        return
+      }
+      setIsEditing(false)
+      fetchAssignment()
+      await refreshCalendar()
+    } catch (err) {
+      setSaveError(String(err))
+    } finally {
       setIsSaving(false)
-      return
     }
-    setIsEditing(false)
-    setIsSaving(false)
-    fetchAssignment()
-    await refreshCalendar()
   }
 
   // Close on Escape
@@ -138,10 +142,10 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
   const hasLateSubmission = assignment?.submissions.some((s) => s.is_late) ?? false
 
   function statusBadge() {
-    if (hasLateSubmission) return { label: 'Late Submission', cls: 'bg-red-100 text-red-700' }
-    if (hasSubmission)     return { label: 'Submitted',       cls: 'bg-green-100 text-green-700' }
-    if (isOverdue)         return { label: 'Overdue',         cls: 'bg-amber-100 text-amber-700' }
-    return { label: 'Upcoming', cls: 'bg-blue-100 text-blue-700' }
+    if (hasLateSubmission) return { label: 'Late Submission', bg: 'var(--color-danger-soft)',   color: 'var(--color-danger)' }
+    if (hasSubmission)     return { label: 'Submitted',       bg: 'color-mix(in oklch, var(--color-success) 15%, transparent)', color: 'var(--color-success)' }
+    if (isOverdue)         return { label: 'Overdue',         bg: 'var(--color-danger-soft)',   color: 'var(--color-danger)' }
+    return                        { label: 'Upcoming',        bg: 'var(--accent-soft)',          color: 'var(--accent)' }
   }
 
   return (
@@ -161,17 +165,21 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Close button */}
+        {/* Close button — 32×32 for adequate hit area */}
         <button
           onClick={onClose}
           style={{
-            position: 'absolute', top: 14, right: 14, zIndex: 10,
-            display: 'flex', padding: 5, borderRadius: 6,
+            position: 'absolute', top: 10, right: 10, zIndex: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 32, height: 32, borderRadius: 8,
             background: 'var(--color-panel2)', border: '1px solid var(--color-border)',
             color: 'var(--color-mute)', cursor: 'pointer',
+            transition: 'color 120ms ease, transform 120ms ease',
           }}
           onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-ink)')}
           onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-mute)')}
+          onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
+          onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
           title="Close (Esc)"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -203,6 +211,7 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
                       autoFocus
                       value={draftName}
                       onChange={(e) => setDraftName(e.target.value)}
+                      className="form-input"
                       style={{
                         width: '100%', fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em',
                         color: 'var(--color-ink)', background: 'var(--color-panel2)',
@@ -218,9 +227,16 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
                       <button
                         onClick={startEditing}
                         title="Edit assignment"
-                        style={{ display: 'flex', padding: 4, borderRadius: 5, color: 'var(--color-mute)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: 28, height: 28, borderRadius: 6,
+                          color: 'var(--color-mute)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0,
+                          transition: 'background-color 120ms ease, color 120ms ease, transform 120ms ease',
+                        }}
                         onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border-s)'; e.currentTarget.style.color = 'var(--color-ink2)' }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--color-mute)' }}
+                        onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
+                        onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
                       >
                         <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -230,11 +246,11 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
                     </div>
                   )}
                 </div>
-                {!isEditing && (
-                  <span className={`flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium ${statusBadge().cls}`}>
-                    {statusBadge().label}
+                {!isEditing && (() => { const b = statusBadge(); return (
+                  <span style={{ flexShrink: 0, borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 500, background: b.bg, color: b.color }}>
+                    {b.label}
                   </span>
-                )}
+                )})()}
               </div>
 
               {isEditing ? (
@@ -245,6 +261,7 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
                       type="datetime-local"
                       value={draftDueDate}
                       onChange={(e) => setDraftDueDate(e.target.value)}
+                      className="form-input"
                       style={{
                         fontSize: 13, color: 'var(--color-ink)', background: 'var(--color-panel2)',
                         border: '1px solid var(--color-border)', borderRadius: 6,
@@ -378,7 +395,7 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
                         value={submitNotes}
                         onChange={(e) => setSubmitNotes(e.target.value)}
                         rows={2}
-                        className="w-full resize-none rounded-lg border px-3 py-2 text-sm"
+                        className="form-input w-full resize-none rounded-lg border px-3 py-2 text-sm"
                         style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
                         placeholder="Any notes about this submission…"
                       />
@@ -449,11 +466,11 @@ function SubmissionCard({ submission, assignmentPath, onDelete }: {
               {ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
             </span>
             {submission.is_late ? (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+              <span style={{ borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 500, background: 'var(--color-danger-soft)', color: 'var(--color-danger)' }}>
                 {submission.days_late > 0 ? `${submission.days_late}d ${submission.hours_late}h late` : `${submission.hours_late}h late`}
               </span>
             ) : (
-              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">On time</span>
+              <span style={{ borderRadius: 99, padding: '1px 8px', fontSize: 11, fontWeight: 500, background: 'color-mix(in oklch, var(--color-success) 15%, transparent)', color: 'var(--color-success)' }}>On time</span>
             )}
           </div>
 
@@ -496,14 +513,35 @@ function SubmissionCard({ submission, assignmentPath, onDelete }: {
         <div className="flex-shrink-0">
           {confirmDelete ? (
             <div className="flex gap-2">
-              <button onClick={onDelete} className="rounded-md px-2 py-1 text-xs font-medium bg-red-500 text-white hover:bg-red-600">Delete</button>
-              <button onClick={() => setConfirmDelete(false)} className="rounded-md px-2 py-1 text-xs font-medium hover:bg-gray-100" style={{ color: 'var(--color-ink2)' }}>Cancel</button>
+              <button onClick={onDelete}
+                style={{ borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 500, background: 'var(--color-danger)', color: 'white', border: 'none', cursor: 'pointer',
+                  transition: 'filter 120ms ease, transform 120ms ease' }}
+                onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.1)')}
+                onMouseLeave={e => (e.currentTarget.style.filter = '')}
+                onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.95)')}
+                onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+              >Delete</button>
+              <button onClick={() => setConfirmDelete(false)}
+                style={{ borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 500, background: 'var(--color-panel2)', border: '1px solid var(--color-border)', color: 'var(--color-ink2)', cursor: 'pointer',
+                  transition: 'background-color 120ms ease, transform 120ms ease' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-panel2)')}
+                onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.95)')}
+                onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+              >Cancel</button>
             </div>
           ) : (
-            <button onClick={() => setConfirmDelete(true)} className="rounded-lg p-1 transition-colors"
-              style={{ color: 'var(--color-mute)' }}
+            <button onClick={() => setConfirmDelete(true)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 28, height: 28, borderRadius: 6, border: 'none', cursor: 'pointer',
+                color: 'var(--color-mute)', background: 'transparent',
+                transition: 'color 120ms ease, transform 120ms ease',
+              }}
               onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-danger)')}
               onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-mute)')}
+              onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
+              onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
               title="Delete submission">
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

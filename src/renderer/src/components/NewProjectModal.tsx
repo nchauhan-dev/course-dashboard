@@ -83,7 +83,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
               placeholder="e.g. Introduction to Biology"
               required
               autoFocus
-              className="w-full rounded-lg px-3 py-2 text-sm"
+              className="form-input w-full rounded-lg px-3 py-2 text-sm"
               style={inputStyle}
             />
           </div>
@@ -95,7 +95,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description…"
               rows={3}
-              className="w-full resize-none rounded-lg px-3 py-2 text-sm"
+              className="form-input w-full resize-none rounded-lg px-3 py-2 text-sm"
               style={inputStyle}
             />
           </div>

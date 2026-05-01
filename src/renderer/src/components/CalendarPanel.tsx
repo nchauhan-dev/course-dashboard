@@ -87,25 +87,37 @@ export default function CalendarPanel({ events, projectId, completedEvents = [],
 
   const totalUpcoming = grouped.overdue.length + grouped.dueToday.length + grouped.later.length
 
+  // 28×28 — better hit area than 22×22, still compact
   const chevBtn: React.CSSProperties = {
-    width: 22, height: 22, borderRadius: 6, border: '1px solid var(--color-border)',
+    width: 28, height: 28, borderRadius: 7, border: '1px solid var(--color-border)',
     background: 'transparent', color: 'var(--color-mute)', display: 'flex',
     alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+    transition: 'background-color 120ms ease, color 120ms ease, transform 120ms ease',
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Month nav */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={prevMonth} style={chevBtn}>
+        <button onClick={prevMonth} style={chevBtn}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+          onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
+          onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+        >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="m15 6-6 6 6 6" />
           </svg>
         </button>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-ink)', letterSpacing: '-0.01em' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-ink)', letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>
           {MONTHS[month]} {year}
         </span>
-        <button onClick={nextMonth} style={chevBtn}>
+        <button onClick={nextMonth} style={chevBtn}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+          onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
+          onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+        >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="m9 6 6 6-6 6" />
           </svg>
@@ -139,8 +151,14 @@ export default function CalendarPanel({ events, projectId, completedEvents = [],
               height: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               borderRadius: 6, background: sel ? 'var(--accent)' : 'transparent',
               color: sel ? 'white' : 'var(--color-ink)', fontSize: 12, fontWeight: sel ? 600 : 400,
-              position: 'relative', cursor: 'pointer',
-            }}>
+              position: 'relative', cursor: 'pointer', fontVariantNumeric: 'tabular-nums',
+              transition: 'background-color 100ms ease, transform 100ms ease',
+            }}
+            onMouseEnter={e => { if (!sel) (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)' }}
+            onMouseLeave={e => { if (!sel) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+            onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.82)')}
+            onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+            >
               <span>{day}</span>
               {dayEvents.length > 0 && (
                 <span style={{
@@ -207,7 +225,11 @@ function UpcomingGroup({
           display: 'flex', alignItems: 'center', gap: 6, width: '100%',
           background: 'var(--color-border-s)', border: 'none', padding: '3px 6px', cursor: 'pointer',
           marginBottom: expanded ? 8 : 0, borderRadius: 5,
+          transition: 'background-color 120ms ease, transform 120ms ease',
         }}
+        onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.97)')}
+        onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+        onMouseLeave={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
       >
         {/* Chevron — points down when expanded, left when collapsed */}
         <svg
@@ -230,6 +252,7 @@ function UpcomingGroup({
           fontSize: 10, fontFamily: '"Geist Mono", monospace', fontWeight: 500,
           background: 'var(--color-panel2)', border: '1px solid var(--color-border)',
           borderRadius: 99, padding: '1px 6px', color: 'var(--color-mute)', lineHeight: 1.6,
+          fontVariantNumeric: 'tabular-nums',
         }}>
           {events.length}
         </span>
@@ -243,7 +266,7 @@ function UpcomingGroup({
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {events.map((ev) => {
+            {events.map((ev, idx) => {
               const due = new Date(ev.due_date)
               const timeLabel = due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
               const dateLabel = due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -254,7 +277,17 @@ function UpcomingGroup({
                     ? onSelectAssignment(ev.projectId, ev.assignmentId)
                     : navigate(`/project/${ev.projectId}/assignment/${ev.assignmentId}`)
                   }
-                  style={{ display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%' }}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left',
+                    background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%',
+                    /* Staggered entrance: each item delays by 40ms × its index */
+                    animation: 'sidebar-fade-in 200ms ease both',
+                    animationDelay: `${idx * 40}ms`,
+                    transition: 'transform 120ms ease',
+                  }}
+                  onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.97)')}
+                  onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
                 >
                   {/* Check circle */}
                   <div style={{

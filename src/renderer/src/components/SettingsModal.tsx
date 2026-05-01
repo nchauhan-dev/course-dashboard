@@ -98,9 +98,16 @@ export default function SettingsModal({ open, onClose }: Props) {
           <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-ink)', margin: 0 }}>Settings</h2>
           <button
             onClick={onClose}
-            style={{ display: 'flex', padding: 4, borderRadius: 6, color: 'var(--color-mute)', background: 'none', border: 'none', cursor: 'pointer' }}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 28, height: 28, borderRadius: 7,
+              color: 'var(--color-mute)', background: 'none', border: 'none', cursor: 'pointer',
+              transition: 'background-color 120ms ease, transform 120ms ease',
+            }}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.transform = 'scale(1)' }}
+            onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
+            onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -116,7 +123,7 @@ export default function SettingsModal({ open, onClose }: Props) {
             value={userName}
             onChange={handleNameChange}
             placeholder="Your name"
-            className="w-full rounded-lg px-3 py-2 text-sm"
+            className="form-input w-full rounded-lg px-3 py-2 text-sm"
             style={{
               border: '1px solid var(--color-border)',
               background: 'var(--color-panel2)',
@@ -139,10 +146,13 @@ export default function SettingsModal({ open, onClose }: Props) {
                   style={{
                     width: 28, height: 28, flexShrink: 0, borderRadius: '50%',
                     background: hex, border: 'none', cursor: 'pointer',
-                    transition: 'transform 0.1s',
+                    transition: 'transform 120ms ease',
                     boxShadow: isSelected ? `inset 0 0 0 2px white, 0 0 0 2px ${hex}` : undefined,
-                    transform: isSelected ? 'scale(1.1)' : undefined,
+                    transform: isSelected ? 'scale(1.15)' : undefined,
                   }}
+                  onMouseDown={e => { if (!isSelected) e.currentTarget.style.transform = 'scale(0.88)' }}
+                  onMouseUp={e => { e.currentTarget.style.transform = isSelected ? 'scale(1.15)' : 'scale(1)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = isSelected ? 'scale(1.15)' : 'scale(1)' }}
                 />
               )
             })}
@@ -160,15 +170,19 @@ export default function SettingsModal({ open, onClose }: Props) {
             style={{
               width: 40, height: 22, borderRadius: 99, border: 'none', cursor: 'pointer',
               background: isDark ? 'var(--accent)' : 'var(--color-border)',
-              position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+              position: 'relative', flexShrink: 0,
+              transition: 'background-color 200ms ease, transform 120ms ease',
               padding: 0,
             }}
+            onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.92)')}
+            onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+            onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
           >
             <span style={{
               position: 'absolute', top: 3, left: isDark ? 21 : 3,
               width: 16, height: 16, borderRadius: '50%',
               background: 'white',
-              transition: 'left 0.2s',
+              transition: 'left 200ms ease',
               display: 'block',
               boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
             }} />
@@ -200,9 +214,12 @@ export default function SettingsModal({ open, onClose }: Props) {
                 background: 'var(--color-panel)',
                 color: 'var(--color-ink2)',
                 cursor: 'pointer',
+                transition: 'background-color 120ms ease, transform 120ms ease',
               }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-panel2)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-panel)')}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-panel)'; e.currentTarget.style.transform = 'scale(1)' }}
+              onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.96)')}
+              onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
             >
               {isChangingVault ? '…' : 'Change'}
             </button>
