@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
 import { api } from '../lib/api'
@@ -327,17 +329,23 @@ export default function NewSidebar() {
             </button>
 
             {/* Workspace dropdown */}
+            <AnimatePresence>
             {switcherOpen && (
-              <div style={{
-                ...cardStyle,
-                borderRadius: '0 0 10px 10px',
-                borderTop: 'none',
-                position: 'absolute', left: 42, right: 0, top: '100%',
-                zIndex: 50,
-                paddingTop: 4, paddingBottom: 4,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                maxHeight: 240, overflowY: 'auto',
-              }}>
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                style={{
+                  ...cardStyle,
+                  borderRadius: '0 0 10px 10px',
+                  borderTop: 'none',
+                  position: 'absolute', left: 42, right: 0, top: '100%',
+                  zIndex: 50,
+                  paddingTop: 4, paddingBottom: 4,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                  maxHeight: 240, overflowY: 'auto',
+                }}>
                 {/* Workspace list */}
                 {workspaces.map((ws) => (
                   <button
@@ -409,8 +417,9 @@ export default function NewSidebar() {
                     New Workspace
                   </button>
                 )}
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </div>
 
           {/* ── Section label ──────────────────────────────────────────────────── */}
@@ -591,7 +600,18 @@ export default function NewSidebar() {
           )}
 
           {/* ── Footer card ───────────────────────────────────────────────────── */}
-          <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', flexShrink: 0 }}>
+          <button
+            ref={footerMenuBtnRef}
+            onClick={openFooterMenu}
+            style={{
+              ...cardStyle,
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', flexShrink: 0,
+              width: '100%', cursor: 'pointer', textAlign: 'left',
+              transition: 'background-color 120ms ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
+          >
             <div style={{
               width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
               background: 'var(--accent-soft)', color: 'var(--accent)',
@@ -606,25 +626,7 @@ export default function NewSidebar() {
             }}>
               {userName || 'User'}
             </span>
-            <button
-              ref={footerMenuBtnRef}
-              onClick={openFooterMenu}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: 22, height: 22, borderRadius: 4, flexShrink: 0,
-                color: 'var(--color-mute)', border: 'none', cursor: 'pointer', background: 'transparent',
-                transition: 'background-color 120ms ease, transform 120ms ease',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border)')}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)' }}
-              onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.85)')}
-              onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
-              </svg>
-            </button>
-          </div>
+          </button>
 
         </div>
       </aside>
@@ -688,27 +690,35 @@ export default function NewSidebar() {
         )
       })()}
 
-      {/* ── Footer three-dot dropdown ─────────────────────────────────────────── */}
-      {footerMenuOpen && (
+      {/* ── Footer dropdown ───────────────────────────────────────────────────── */}
+      {footerMenuOpen && createPortal(
         <div
           ref={footerMenuDropdownRef}
-          className="fixed z-50 min-w-[140px] rounded-lg py-1 shadow-lg"
-          style={{ bottom: footerMenuPos.bottom, left: footerMenuPos.left, border: '1px solid var(--color-border)', background: 'var(--color-panel)' }}
+          style={{
+            position: 'fixed', bottom: footerMenuPos.bottom, left: footerMenuPos.left,
+            zIndex: 9999, minWidth: 140, borderRadius: 8, paddingTop: 4, paddingBottom: 4,
+            border: '1px solid var(--color-border)', background: 'var(--color-panel)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          }}
         >
           <button
             onClick={() => { setFooterMenuOpen(false); setSettingsOpen(true) }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"
-            style={{ color: 'var(--color-ink2)' }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-panel2)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+              padding: '7px 12px', textAlign: 'left', fontSize: 13,
+              background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-ink2)',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
           >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ color: 'var(--color-mute)' }}>
+            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} style={{ flexShrink: 0, color: 'var(--color-mute)' }}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
             Settings
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import type { CalendarEvent } from '../../../../types/index'
 
 interface Props {
@@ -301,66 +302,76 @@ function UpcomingGroup({
       </button>
 
       {/* Items or empty state */}
-      {expanded && (
-        events.length === 0 ? (
-          <p style={{ fontSize: 11.5, color: 'var(--color-mute)', margin: 0, padding: '2px 0 4px 17px', fontStyle: 'italic' }}>
-            None, you're on track.
-          </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {events.map((ev, idx) => {
-              const due = new Date(ev.due_date)
-              const timeLabel = due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-              const dateLabel = due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-              return (
-                <button
-                  key={ev.id}
-                  onClick={() => onSelectAssignment
-                    ? onSelectAssignment(ev.projectId, ev.assignmentId)
-                    : navigate(`/project/${ev.projectId}/assignment/${ev.assignmentId}`)
-                  }
-                  style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left',
-                    background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%',
-                    /* Staggered entrance: each item delays by 40ms × its index */
-                    animation: 'sidebar-fade-in 200ms ease both',
-                    animationDelay: `${idx * 40}ms`,
-                    transition: 'transform 120ms ease',
-                  }}
-                  onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.97)')}
-                  onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
-                >
-                  {/* Check circle */}
-                  <div style={{
-                    width: 13, height: 13, borderRadius: '50%', flexShrink: 0, marginTop: 2,
-                    border: `1.5px solid ${tone === 'success' ? 'var(--color-success)' : tone === 'danger' ? 'var(--color-danger)' : 'var(--color-border)'}`,
-                    background: 'transparent',
-                  }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3, color: 'var(--color-ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {ev.title}
-                    </div>
-                    {!projectId && (
-                      <div style={{ fontSize: 11, color: 'var(--color-mute)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 5, opacity: 0.75 }}>
-                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: ev.projectColor, display: 'inline-block', flexShrink: 0 }} />
-                        <span>{ev.projectName}</span>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            {events.length === 0 ? (
+              <p style={{ fontSize: 11.5, color: 'var(--color-mute)', margin: 0, padding: '2px 0 4px 17px', fontStyle: 'italic' }}>
+                None, you're on track.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {events.map((ev, idx) => {
+                  const due = new Date(ev.due_date)
+                  const timeLabel = due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                  const dateLabel = due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                  return (
+                    <button
+                      key={ev.id}
+                      onClick={() => onSelectAssignment
+                        ? onSelectAssignment(ev.projectId, ev.assignmentId)
+                        : navigate(`/project/${ev.projectId}/assignment/${ev.assignmentId}`)
+                      }
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left',
+                        background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%',
+                        /* Staggered entrance: each item delays by 40ms × its index */
+                        animation: 'sidebar-fade-in 200ms ease both',
+                        animationDelay: `${idx * 40}ms`,
+                        transition: 'transform 120ms ease',
+                      }}
+                      onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.97)')}
+                      onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+                      onMouseLeave={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+                    >
+                      {/* Check circle */}
+                      <div style={{
+                        width: 13, height: 13, borderRadius: '50%', flexShrink: 0, marginTop: 2,
+                        border: `1.5px solid ${tone === 'success' ? 'var(--color-success)' : tone === 'danger' ? 'var(--color-danger)' : 'var(--color-border)'}`,
+                        background: 'transparent',
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.3, color: 'var(--color-ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {ev.title}
+                        </div>
+                        {!projectId && (
+                          <div style={{ fontSize: 11, color: 'var(--color-mute)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 5, opacity: 0.75 }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: ev.projectColor, display: 'inline-block', flexShrink: 0 }} />
+                            <span>{ev.projectName}</span>
+                          </div>
+                        )}
+                        <div style={{
+                          fontSize: 10.5, marginTop: 2,
+                          color: tone === 'danger' ? 'var(--color-danger)' : tone === 'success' ? 'var(--color-success)' : 'var(--color-mute)',
+                          fontFamily: '"Geist Mono", monospace', letterSpacing: '0.01em',
+                        }}>
+                          {dateLabel} · {timeLabel}
+                        </div>
                       </div>
-                    )}
-                    <div style={{
-                      fontSize: 10.5, marginTop: 2,
-                      color: tone === 'danger' ? 'var(--color-danger)' : tone === 'success' ? 'var(--color-success)' : 'var(--color-mute)',
-                      fontFamily: '"Geist Mono", monospace', letterSpacing: '0.01em',
-                    }}>
-                      {dateLabel} · {timeLabel}
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        )
-      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
