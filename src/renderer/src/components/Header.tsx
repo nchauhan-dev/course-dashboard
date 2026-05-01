@@ -1,4 +1,4 @@
-import { useLocation, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
 import SearchBar from './SearchBar'
 
@@ -12,6 +12,7 @@ function ChevronRight() {
 
 export default function Header() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { projectId } = useParams<{ projectId: string }>()
   const { activeWorkspace, projects } = useApp()
 
@@ -31,7 +32,12 @@ export default function Header() {
           <span className="font-medium" style={{ color: 'var(--color-ink)' }}>Dashboard</span>
         ) : (
           <>
-            <span>Projects</span>
+            <span
+              onClick={() => navigate('/dashboard')}
+              style={{ cursor: 'pointer', transition: 'color 120ms ease' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-ink)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '')}
+            >Dashboard</span>
             <ChevronRight />
             <span className="font-medium" style={{ color: 'var(--color-ink)' }}>{project?.name ?? ''}</span>
           </>

@@ -22,11 +22,25 @@ interface AppContextValue extends AppState {
   addProject: (project: Project) => void
   removeProject: (projectId: string) => void
   clearError: () => void
+  // Global assignment modal
+  openAssignment: { projectId: string; assignmentId: string } | null
+  openAssignmentModal: (projectId: string, assignmentId: string) => void
+  closeAssignmentModal: () => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [openAssignment, setOpenAssignment] = useState<{ projectId: string; assignmentId: string } | null>(null)
+
+  const openAssignmentModal = useCallback((projectId: string, assignmentId: string) => {
+    setOpenAssignment({ projectId, assignmentId })
+  }, [])
+
+  const closeAssignmentModal = useCallback(() => {
+    setOpenAssignment(null)
+  }, [])
+
   const [state, setState] = useState<AppState>({
     rootPath: null,
     activeWorkspace: '',
@@ -143,7 +157,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         refreshCalendar,
         addProject,
         removeProject,
-        clearError
+        clearError,
+        openAssignment,
+        openAssignmentModal,
+        closeAssignmentModal,
       }}
     >
       {children}

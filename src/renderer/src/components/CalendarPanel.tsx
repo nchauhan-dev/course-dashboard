@@ -7,6 +7,12 @@ interface Props {
   projectId?: string
   completedEvents?: CalendarEvent[]
   onSelectAssignment?: (projectId: string, assignmentId: string) => void
+  // Lifted nav state — when provided, CalendarPanel is controlled externally
+  month?: number
+  year?: number
+  onPrevMonth?: () => void
+  onNextMonth?: () => void
+  hideMonthNav?: boolean
 }
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -15,7 +21,11 @@ const MONTHS = [
   'July','August','September','October','November','December'
 ]
 
-export default function CalendarPanel({ events, projectId, completedEvents = [], onSelectAssignment }: Props) {
+export default function CalendarPanel({
+  events, projectId, completedEvents = [], onSelectAssignment,
+  month: monthProp, year: yearProp, onPrevMonth, onNextMonth,
+  hideMonthNav = false,
+}: Props) {
   const navigate = useNavigate()
   const today = useMemo(() => new Date(), [])
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
@@ -38,13 +48,16 @@ export default function CalendarPanel({ events, projectId, completedEvents = [],
     return map
   }, [filtered])
 
-  const year = viewDate.getFullYear()
-  const month = viewDate.getMonth()
+  // Use externally lifted state when provided, otherwise use internal state
+  const year  = yearProp  ?? viewDate.getFullYear()
+  const month = monthProp ?? viewDate.getMonth()
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
   function prevMonth() { setViewDate(new Date(year, month - 1, 1)) }
   function nextMonth() { setViewDate(new Date(year, month + 1, 1)) }
+  const handlePrev = onPrevMonth ?? prevMonth
+  const handleNext = onNextMonth ?? nextMonth
 
   function dateKey(d: number) {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -96,33 +109,37 @@ export default function CalendarPanel({ events, projectId, completedEvents = [],
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Month nav */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={prevMonth} style={chevBtn}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
-          onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
-          onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="m15 6-6 6 6 6" />
-          </svg>
-        </button>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-ink)', letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>
-          {MONTHS[month]} {year}
-        </span>
-        <button onClick={nextMonth} style={chevBtn}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
-          onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
-          onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-        </button>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    {/* Fixed top section */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0 }}>
+      {/* Month nav — hidden when lifted into aside header */}
+      {!hideMonthNav && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button onClick={handlePrev} style={chevBtn}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+            onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
+            onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 6-6 6 6 6" />
+            </svg>
+          </button>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-ink)', letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>
+            {MONTHS[month]} {year}
+          </span>
+          <button onClick={handleNext} style={chevBtn}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+            onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
+            onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Day headers */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: -8 }}>
@@ -133,21 +150,44 @@ export default function CalendarPanel({ events, projectId, completedEvents = [],
         ))}
       </div>
 
-      {/* Calendar grid */}
+      {/* Calendar grid — always 6 rows × 7 cols = 42 cells */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-        {Array.from({ length: firstDay }).map((_, i) => (
-          <div key={`e-${i}`} style={{ height: 28 }} />
-        ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const day = i + 1
-          const key = dateKey(day)
+        {Array.from({ length: 42 }).map((_, i) => {
+          const cellDay = i - firstDay + 1          // 1-based day within current month
+          const isOverflow = cellDay < 1 || cellDay > daysInMonth
+
+          // Compute the display number for overflow cells
+          let displayDay: number
+          if (cellDay < 1) {
+            // Previous month — days counting back from end of prev month
+            const prevMonthDays = new Date(year, month, 0).getDate()
+            displayDay = prevMonthDays + cellDay
+          } else if (cellDay > daysInMonth) {
+            displayDay = cellDay - daysInMonth
+          } else {
+            displayDay = cellDay
+          }
+
+          if (isOverflow) {
+            return (
+              <div key={`overflow-${i}`} style={{
+                height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: 6, fontSize: 12, fontVariantNumeric: 'tabular-nums',
+                color: 'var(--color-ink)', opacity: 0.25, pointerEvents: 'none',
+              }}>
+                {displayDay}
+              </div>
+            )
+          }
+
+          const key = dateKey(displayDay)
           const dayEvents = eventsByDate.get(key) ?? []
           const hasLate = dayEvents.some((e) => e.isLate)
           const hasToday = dayEvents.some((e) => !e.isLate && key === todayStr)
           const dotColor = hasLate ? 'var(--color-danger)' : hasToday ? 'var(--accent)' : 'var(--color-mute)'
-          const sel = isToday(day)
+          const sel = isToday(displayDay)
           return (
-            <div key={day} style={{
+            <div key={displayDay} style={{
               height: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               borderRadius: 6, background: sel ? 'var(--accent)' : 'transparent',
               color: sel ? 'white' : 'var(--color-ink)', fontSize: 12, fontWeight: sel ? 600 : 400,
@@ -159,7 +199,7 @@ export default function CalendarPanel({ events, projectId, completedEvents = [],
             onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.82)')}
             onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
             >
-              <span>{day}</span>
+              <span>{displayDay}</span>
               {dayEvents.length > 0 && (
                 <span style={{
                   position: 'absolute', bottom: 2, width: 4, height: 4, borderRadius: '50%',
@@ -187,18 +227,20 @@ export default function CalendarPanel({ events, projectId, completedEvents = [],
       {/* Divider */}
       <div style={{ borderTop: '1px solid var(--color-border)' }} />
 
-      {/* Upcoming — grouped by status */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--color-mute)', fontWeight: 500, textTransform: 'uppercase' }}>Assignments</span>
-          <span style={{ fontSize: 11, color: 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>{totalUpcoming}</span>
-        </div>
-
-        <UpcomingGroup label="Completed" tone="success" events={completedEvents}  projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
-        <UpcomingGroup label="Overdue"   tone="danger"  events={grouped.overdue}  projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
-        <UpcomingGroup label="Today"     tone="today"   events={grouped.dueToday} projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
-        <UpcomingGroup label="Later"     tone="mute"    events={grouped.later}    projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
+      {/* Upcoming — label (fixed) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0 }}>
+        <span style={{ fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--color-mute)', fontWeight: 500, textTransform: 'uppercase' }}>Assignments</span>
+        <span style={{ fontSize: 11, color: 'var(--color-mute)', fontFamily: '"Geist Mono", monospace' }}>{totalUpcoming}</span>
       </div>
+    </div>
+
+    {/* Scrollable upcoming groups */}
+    <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingTop: 16, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+      <UpcomingGroup label="Completed" tone="success" events={completedEvents}  projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
+      <UpcomingGroup label="Overdue"   tone="danger"  events={grouped.overdue}  projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
+      <UpcomingGroup label="Today"     tone="today"   events={grouped.dueToday} projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
+      <UpcomingGroup label="Later"     tone="mute"    events={grouped.later}    projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
+    </div>
     </div>
   )
 }

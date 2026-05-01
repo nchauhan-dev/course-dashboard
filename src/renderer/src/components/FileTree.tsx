@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../lib/api'
 import type { TreeNode } from '../../../../types/index'
 
@@ -28,6 +29,8 @@ function countStats(nodes: TreeNode[]): { files: number; bytes: number } {
 export default function FileTree({ rootPath, naked, exclude, onStatsReady }: Props) {
   const [nodes, setNodes] = useState<TreeNode[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isRootDragOver, setIsRootDragOver] = useState(false)
+  const rootDragCounter = useRef(0)
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -47,6 +50,40 @@ export default function FileTree({ rootPath, naked, exclude, onStatsReady }: Pro
 
   useEffect(() => { load() }, [load])
 
+  // ── Root-level drop zone ───────────────────────────────────────────────────
+  // Directory rows call stopPropagation on their drag events, so this only
+  // fires when dropping on file rows or empty space — correctly targeting rootPath.
+
+  function handleRootDragEnter(e: React.DragEvent) {
+    e.preventDefault()
+    rootDragCounter.current++
+    setIsRootDragOver(true)
+  }
+
+  function handleRootDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    rootDragCounter.current--
+    if (rootDragCounter.current === 0) setIsRootDragOver(false)
+  }
+
+  function handleRootDragOver(e: React.DragEvent) {
+    e.preventDefault()
+  }
+
+  async function handleRootDrop(e: React.DragEvent) {
+    e.preventDefault()
+    rootDragCounter.current = 0
+    setIsRootDragOver(false)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
+    for (const file of files) {
+      const sourcePath = (file as unknown as { path: string }).path
+      if (!sourcePath) continue
+      await api.copyFile({ sourcePath, destinationFolder: rootPath })
+    }
+    load()
+  }
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -59,14 +96,21 @@ export default function FileTree({ rootPath, naked, exclude, onStatsReady }: Pro
   }
 
   return (
-    <div className={naked ? 'overflow-x-hidden' : 'rounded-lg border border-gray-200 bg-white overflow-x-hidden'}>
+    <div
+      className={naked ? 'overflow-x-hidden' : 'rounded-lg border border-gray-200 bg-white overflow-x-hidden'}
+      style={isRootDragOver ? { background: 'var(--color-border-s)' } : undefined}
+      onDragEnter={handleRootDragEnter}
+      onDragLeave={handleRootDragLeave}
+      onDragOver={handleRootDragOver}
+      onDrop={handleRootDrop}
+    >
       {nodes.length === 0 ? (
         <p className="px-4 py-6 text-sm" style={{ color: 'var(--color-mute)' }}>
           No files yet. Drop files here to add them.
         </p>
       ) : (
-        nodes.map((node) => (
-          <TreeNodeRow key={node.path} node={node} depth={0} onRefresh={load} naked={naked} />
+        nodes.map((node, index) => (
+          <TreeNodeRow key={node.path} node={node} depth={0} onRefresh={load} naked={naked} animationIndex={index} />
         ))
       )}
     </div>
@@ -77,12 +121,14 @@ function TreeNodeRow({
   node,
   depth,
   onRefresh,
-  naked
+  naked,
+  animationIndex,
 }: {
   node: TreeNode
   depth: number
   onRefresh: () => void
   naked?: boolean
+  animationIndex?: number
 }) {
   const [expanded, setExpanded] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
@@ -315,7 +361,12 @@ function TreeNodeRow({
   }
 
   return (
-    <div>
+    <div
+      style={depth === 0 && animationIndex !== undefined ? {
+        animation: 'sidebar-fade-in 200ms ease both',
+        animationDelay: `${animationIndex * 30}ms`,
+      } : undefined}
+    >
       {/* Row */}
       <div
         className={`flex items-center gap-2 pr-3 transition-colors ${rowBg} ${naked ? '' : 'border-b border-gray-100'}`}
@@ -384,25 +435,36 @@ function TreeNodeRow({
                   </svg>
                 </button>
 
-                {menuOpen && menuPos && (
+                {menuOpen && menuPos && createPortal(
                   <div
                     ref={dropdownRef}
-                    className="w-28 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg"
-                    style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
+                    style={{
+                      position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999,
+                      width: 128, borderRadius: 8,
+                      border: '1px solid var(--color-border)',
+                      background: 'var(--color-panel)',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                      overflow: 'hidden',
+                    }}
                   >
                     <button
                       onClick={() => { setMenuOpen(false); setMenuPos(null); setRenameValue(node.name); setIsRenaming(true) }}
-                      className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                      style={{ display: 'block', width: '100%', padding: '7px 12px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-ink)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                     >
                       Rename
                     </button>
                     <button
                       onClick={() => { setMenuOpen(false); setMenuPos(null); setIsDeleting(true) }}
-                      className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+                      style={{ display: 'block', width: '100%', padding: '7px 12px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                     >
                       Delete
                     </button>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             )}
@@ -446,25 +508,36 @@ function TreeNodeRow({
                   </svg>
                 </button>
 
-                {menuOpen && menuPos && (
+                {menuOpen && menuPos && createPortal(
                   <div
                     ref={dropdownRef}
-                    className="w-28 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg"
-                    style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
+                    style={{
+                      position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999,
+                      width: 128, borderRadius: 8,
+                      border: '1px solid var(--color-border)',
+                      background: 'var(--color-panel)',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                      overflow: 'hidden',
+                    }}
                   >
                     <button
                       onClick={() => { setMenuOpen(false); setMenuPos(null); setRenameValue(node.name); setIsRenaming(true) }}
-                      className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                      style={{ display: 'block', width: '100%', padding: '7px 12px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-ink)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                     >
                       Rename
                     </button>
                     <button
                       onClick={() => { setMenuOpen(false); setMenuPos(null); setIsDeleting(true) }}
-                      className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+                      style={{ display: 'block', width: '100%', padding: '7px 12px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                     >
                       Delete
                     </button>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             )}

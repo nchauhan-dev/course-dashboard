@@ -9,6 +9,10 @@ import ProjectDetail from './pages/ProjectDetail'
 import Archive from './pages/Archive'
 import NewProjectModal from './components/NewProjectModal'
 import SettingsModal from './components/SettingsModal'
+import NewSidebar from './components/NewSidebar'
+import AssignmentModal from './components/AssignmentModal'
+
+export const USE_NEW_SIDEBAR = true
 
 // ── Persistent sidebar ────────────────────────────────────────────────────────
 
@@ -547,14 +551,21 @@ function AppRoutes() {
 // ── App shell ─────────────────────────────────────────────────────────────────
 
 function AppShell() {
-  const { rootPath, isLoading } = useApp()
+  const { rootPath, isLoading, openAssignment, closeAssignmentModal } = useApp()
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {rootPath && !isLoading && <AppSidebar />}
+      {rootPath && !isLoading && (USE_NEW_SIDEBAR ? <NewSidebar /> : <AppSidebar />)}
       <div className="flex flex-1 min-w-0 overflow-hidden">
         <AppRoutes />
       </div>
+      {openAssignment && (
+        <AssignmentModal
+          projectId={openAssignment.projectId}
+          assignmentId={openAssignment.assignmentId}
+          onClose={closeAssignmentModal}
+        />
+      )}
     </div>
   )
 }

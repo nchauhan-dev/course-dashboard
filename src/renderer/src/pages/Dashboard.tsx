@@ -3,7 +3,6 @@ import { useApp } from '../store/AppContext'
 import ProjectCard from '../components/ProjectCard'
 import CalendarPanel from '../components/CalendarPanel'
 import NewProjectModal from '../components/NewProjectModal'
-import AssignmentModal from '../components/AssignmentModal'
 import Header from '../components/Header'
 
 // Stat helpers — local time so date boundaries match the user's clock
@@ -25,10 +24,29 @@ function formatDateLabel() {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()
 }
 
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
+]
+
+const chevBtn: React.CSSProperties = {
+  width: 28, height: 28, borderRadius: 7, border: '1px solid var(--color-border)',
+  background: 'transparent', color: 'var(--color-mute)', display: 'flex',
+  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+  transition: 'background-color 120ms ease, color 120ms ease, transform 120ms ease',
+}
+
 export default function Dashboard() {
-  const { projects, calendarEvents, userName } = useApp()
+  const { projects, calendarEvents, userName, openAssignmentModal } = useApp()
   const [showNewProject, setShowNewProject] = useState(false)
-  const [openAssignment, setOpenAssignment] = useState<{ projectId: string; assignmentId: string } | null>(null)
+
+  // Lifted calendar nav state
+  const today = new Date()
+  const [calViewDate, setCalViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
+  const calYear  = calViewDate.getFullYear()
+  const calMonth = calViewDate.getMonth()
+  function prevMonth() { setCalViewDate(new Date(calYear, calMonth - 1, 1)) }
+  function nextMonth() { setCalViewDate(new Date(calYear, calMonth + 1, 1)) }
 
   const stats = useMemo(() => {
     const today = todayStr()
@@ -137,8 +155,16 @@ export default function Dashboard() {
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-                {projects.map((project) => (
-                  <ProjectCard key={project.id} project={project} />
+                {projects.map((project, index) => (
+                  <div
+                    key={project.id}
+                    style={{
+                      animation: 'sidebar-fade-in 200ms ease both',
+                      animationDelay: `${index * 60}ms`,
+                    }}
+                  >
+                    <ProjectCard project={project} />
+                  </div>
                 ))}
               </div>
             )}
@@ -152,15 +178,42 @@ export default function Dashboard() {
         style={{ width: 288, borderLeft: '1px solid var(--color-border)', background: 'var(--color-panel)' }}
       >
         <div
-          className="drag-region flex-shrink-0 flex items-center px-4"
+          className="drag-region flex-shrink-0 flex items-center justify-between px-4"
           style={{ height: 44, borderBottom: '1px solid var(--color-border-s)' }}
         >
-          <span className="no-drag" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink)' }}>Calendar</span>
+          <button className="no-drag" onClick={prevMonth} style={chevBtn}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+            onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
+            onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 6-6 6 6 6" />
+            </svg>
+          </button>
+          <span className="no-drag" style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-ink)', letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>
+            {MONTHS[calMonth]} {calYear}
+          </span>
+          <button className="no-drag" onClick={nextMonth} style={chevBtn}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+            onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
+            onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto no-drag" style={{ padding: '14px 16px' }}>
           <CalendarPanel
             events={calendarEvents.filter((e) => !e.completed)}
-            onSelectAssignment={(pid, aid) => setOpenAssignment({ projectId: pid, assignmentId: aid })}
+            onSelectAssignment={(pid, aid) => openAssignmentModal(pid, aid)}
+            month={calMonth}
+            year={calYear}
+            onPrevMonth={prevMonth}
+            onNextMonth={nextMonth}
+            hideMonthNav
           />
         </div>
       </aside>
@@ -169,13 +222,6 @@ export default function Dashboard() {
         <NewProjectModal onClose={() => setShowNewProject(false)} />
       )}
 
-      {openAssignment && (
-        <AssignmentModal
-          projectId={openAssignment.projectId}
-          assignmentId={openAssignment.assignmentId}
-          onClose={() => setOpenAssignment(null)}
-        />
-      )}
     </div>
   )
 }

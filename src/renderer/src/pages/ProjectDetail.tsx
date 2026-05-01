@@ -4,9 +4,21 @@ import { useApp } from '../store/AppContext'
 import { api } from '../lib/api'
 import CalendarPanel from '../components/CalendarPanel'
 import FileTree from '../components/FileTree'
-import AssignmentModal from '../components/AssignmentModal'
 import Header from '../components/Header'
+import { USE_NEW_SIDEBAR } from '../App'
 import type { Assignment } from '../../../../types/index'
+
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
+]
+
+const chevBtn: React.CSSProperties = {
+  width: 28, height: 28, borderRadius: 7, border: '1px solid var(--color-border)',
+  background: 'transparent', color: 'var(--color-mute)', display: 'flex',
+  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+  transition: 'background-color 120ms ease, color 120ms ease, transform 120ms ease',
+}
 
 function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length
@@ -21,7 +33,7 @@ function formatBytes(bytes: number): string {
 
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>()
-  const { projects, calendarEvents, activeWorkspace, refreshCalendar } = useApp()
+  const { projects, calendarEvents, activeWorkspace, refreshCalendar, openAssignmentModal } = useApp()
 
   const project = projects.find((c) => c.id === projectId)
 
@@ -47,6 +59,21 @@ export default function ProjectDetail() {
 
   // Assignment modal
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null)
+
+  // Lifted calendar nav state
+  const todayDate = new Date()
+  const [calViewDate, setCalViewDate] = useState(new Date(todayDate.getFullYear(), todayDate.getMonth(), 1))
+  const calYear  = calViewDate.getFullYear()
+  const calMonth = calViewDate.getMonth()
+  function prevCalMonth() { setCalViewDate(new Date(calYear, calMonth - 1, 1)) }
+  function nextCalMonth() { setCalViewDate(new Date(calYear, calMonth + 1, 1)) }
+
+  // Delegate to global modal in AppContext
+  useEffect(() => {
+    if (!openAssignmentId || !project) return
+    openAssignmentModal(project.id, openAssignmentId)
+    setOpenAssignmentId(null)
+  }, [openAssignmentId, project, openAssignmentModal])
 
   // Notes (Description + Outcome)
   const [noteDescription, setNoteDescription] = useState('')
@@ -172,11 +199,36 @@ export default function ProjectDetail() {
       {/* ── Unified header ───────────────────────────────────────────────────── */}
       <Header />
 
+      {/* ── Stat strip ───────────────────────────────────────────────────────── */}
+      <div
+        className="flex-shrink-0 grid"
+        style={{ gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+      >
+        {[
+          { label: 'Overdue',   value: projectStats.overdue,   color: 'var(--color-danger)' },
+          { label: 'Remaining', value: projectStats.remaining, color: 'var(--accent)' },
+          { label: 'Completed', value: projectStats.completed, color: 'var(--color-success)' },
+          { label: 'Score',     value: '—',                    color: 'var(--color-ink)' },
+        ].map((s, i) => (
+          <div
+            key={s.label}
+            style={{
+              padding: '12px 20px',
+              borderRight: i < 3 ? '1px solid var(--color-border)' : 'none',
+              display: 'flex', flexDirection: 'column', gap: 3,
+            }}
+          >
+            <div style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--color-mute)', fontWeight: 500, textTransform: 'uppercase' }}>{s.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 500, color: s.color, letterSpacing: '-0.04em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
       {/* ── Columns ───────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
       {/* ── Secondary sidebar: File tree ─────────────────────────────────────── */}
-      <aside
+      {!USE_NEW_SIDEBAR && <aside
         className="flex flex-col flex-shrink-0 overflow-hidden"
         style={{ width: 264, borderRight: '1px solid var(--color-border)', background: 'var(--color-sidebar)' }}
       >
@@ -275,7 +327,7 @@ export default function ProjectDetail() {
             synced
           </span>
         </div>
-      </aside>
+      </aside>}
 
       {/* ── Main: Assignments ─────────────────────────────────────────────────── */}
       <main className="flex flex-1 flex-col overflow-hidden">
@@ -314,30 +366,6 @@ export default function ProjectDetail() {
               </svg>
               New Assignment
             </button>
-          </div>
-
-          {/* Stat strip */}
-          <div
-            className="flex-shrink-0 grid mb-6"
-            style={{ gridTemplateColumns: 'repeat(3, 1fr)', borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)', marginLeft: -28, marginRight: -28 }}
-          >
-            {[
-              { label: 'Overdue',   value: projectStats.overdue,   color: 'var(--color-danger)' },
-              { label: 'Remaining', value: projectStats.remaining, color: 'var(--accent)' },
-              { label: 'Completed', value: projectStats.completed, color: 'var(--color-success)' },
-            ].map((s, i) => (
-              <div
-                key={s.label}
-                style={{
-                  padding: '12px 28px',
-                  borderRight: i < 2 ? '1px solid var(--color-border)' : 'none',
-                  display: 'flex', flexDirection: 'column', gap: 3,
-                }}
-              >
-                <div style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--color-mute)', fontWeight: 500, textTransform: 'uppercase' }}>{s.label}</div>
-                <div style={{ fontSize: 24, fontWeight: 500, color: s.color, letterSpacing: '-0.04em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
-              </div>
-            ))}
           </div>
 
           {/* Analytics — 1/3 donut + 2/3 assignments list */}
@@ -438,10 +466,32 @@ export default function ProjectDetail() {
         style={{ width: 288, borderLeft: '1px solid var(--color-border)', background: 'var(--color-panel)' }}
       >
         <div
-          className="drag-region flex-shrink-0 flex items-center px-4"
+          className="drag-region flex-shrink-0 flex items-center justify-between px-4"
           style={{ height: 44, borderBottom: '1px solid var(--color-border-s)' }}
         >
-          <span className="no-drag" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink)' }}>Calendar</span>
+          <button className="no-drag" onClick={prevCalMonth} style={chevBtn}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+            onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
+            onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 6-6 6 6 6" />
+            </svg>
+          </button>
+          <span className="no-drag" style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-ink)', letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>
+            {MONTHS[calMonth]} {calYear}
+          </span>
+          <button className="no-drag" onClick={nextCalMonth} style={chevBtn}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-border-s)'; (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+            onMouseDown={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(0.88)')}
+            onMouseUp={e => ((e.currentTarget as HTMLElement).style.transform = 'scale(1)')}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto no-drag" style={{ padding: '14px 16px' }}>
           <CalendarPanel
@@ -449,18 +499,14 @@ export default function ProjectDetail() {
             projectId={project.id}
             onSelectAssignment={(_pid, aid) => setOpenAssignmentId(aid)}
             completedEvents={calendarEvents.filter((e) => e.projectId === project.id && e.completed)}
+            month={calMonth}
+            year={calYear}
+            onPrevMonth={prevCalMonth}
+            onNextMonth={nextCalMonth}
+            hideMonthNav
           />
         </div>
       </aside>
-
-      {/* ── New assignment modal ──────────────────────────────────────────────── */}
-      {openAssignmentId && (
-        <AssignmentModal
-          projectId={project.id}
-          assignmentId={openAssignmentId}
-          onClose={() => setOpenAssignmentId(null)}
-        />
-      )}
 
       {showNewAssignment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
