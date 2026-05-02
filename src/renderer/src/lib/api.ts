@@ -8,7 +8,8 @@ import type {
   CreateProjectParams,
   CreateAssignmentParams,
   SubmitFilesParams,
-  IpcResult
+  IpcResult,
+  ProjectLink
 } from '../../../types/index'
 
 declare global {
@@ -60,6 +61,11 @@ declare global {
       copyFile: (params: { sourcePath: string; destinationFolder: string }) => Promise<IpcResult<void>>
       restoreArchiveItem: (params: { itemPath: string; rootPath: string }) => Promise<IpcResult<void>>
       deletePermanent: (params: { itemPath: string }) => Promise<IpcResult<void>>
+
+      getLinks: (projectPath: string) => Promise<IpcResult<ProjectLink[]>>
+      saveLink: (projectPath: string, url: string) => Promise<IpcResult<ProjectLink>>
+      deleteLink: (projectPath: string, linkId: string) => Promise<IpcResult<void>>
+      openExternal: (url: string) => Promise<void>
     }
   }
 }
@@ -106,5 +112,10 @@ export const api = {
   deleteFolder: (params: { folderPath: string }) => window.api.deleteFolder(params),
   copyFile: (params: { sourcePath: string; destinationFolder: string }) => window.api.copyFile(params),
   restoreArchiveItem: (params: { itemPath: string; rootPath: string }) => window.api.restoreArchiveItem(params),
-  deletePermanent: (params: { itemPath: string }) => window.api.deletePermanent(params)
+  deletePermanent: (params: { itemPath: string }) => window.api.deletePermanent(params),
+
+  getLinks: (projectPath: string): Promise<IpcResult<ProjectLink[]>> => window.api.getLinks(projectPath),
+  saveLink: (projectPath: string, url: string): Promise<IpcResult<ProjectLink>> => window.api.saveLink(projectPath, url),
+  deleteLink: (projectPath: string, linkId: string): Promise<IpcResult<void>> => window.api.deleteLink(projectPath, linkId),
+  openExternal: (url: string): Promise<void> => window.api.openExternal(url)
 }

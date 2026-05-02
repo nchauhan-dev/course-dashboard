@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { join } from 'path'
 import fs from 'fs'
 import path from 'path'
+import https from 'https'
+import http from 'http'
 import matter from 'gray-matter'
 import { v4 as uuidv4 } from 'uuid'
 import chokidar from 'chokidar'
@@ -15,6 +17,7 @@ import type {
   CreateProjectParams,
   CreateAssignmentParams,
   SubmitFilesParams,
+  ProjectLink,
   IpcResult
 } from '../../types/index'
 
@@ -414,33 +417,37 @@ function startProjectWatcher(projectPath: string): void {
 
   const keySet = activityKeys.get(projectPath)!
 
-  const watcher = chokidar.watch(projectPath, {
-    ignoreInitial: true,         // don't re-fire for files already scanned on startup
-    persistent: true,
-    followSymlinks: false,       // avoid infinite loops from circular symlinks
-    awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
-    ignored: (p: string) => isJunk(p),
-  })
+  try {
+    const watcher = chokidar.watch(projectPath, {
+      ignoreInitial: true,         // don't re-fire for files already scanned on startup
+      persistent: true,
+      followSymlinks: false,       // avoid infinite loops from circular symlinks
+      awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+      ignored: (p: string) => isJunk(p),
+    })
 
-  function handleFile(filePath: string): void {
-    try {
-      const stat  = fs.statSync(filePath)
-      const mtime = roundToSecond(stat.mtime).toISOString()
-      const rel   = path.relative(projectPath, filePath)
-      const key   = makeActivityKey(rel, mtime)
-      if (keySet.has(key)) return
-      keySet.add(key)
-      appendActivityEvents(projectPath, [{ path: rel, mtime, source: 'chokidar' }])
-    } catch {
-      /* file disappeared before stat — ignore */
+    function handleFile(filePath: string): void {
+      try {
+        const stat  = fs.statSync(filePath)
+        const mtime = roundToSecond(stat.mtime).toISOString()
+        const rel   = path.relative(projectPath, filePath)
+        const key   = makeActivityKey(rel, mtime)
+        if (keySet.has(key)) return
+        keySet.add(key)
+        appendActivityEvents(projectPath, [{ path: rel, mtime, source: 'chokidar' }])
+      } catch {
+        /* file disappeared before stat — ignore */
+      }
     }
+
+    watcher.on('add', handleFile)
+    watcher.on('change', handleFile)
+    watcher.on('error', (err) => console.warn('[activity] watcher error:', err))
+
+    watchers.set(projectPath, watcher)
+  } catch (err) {
+    console.warn(`[activity] chokidar watch failed for ${projectPath}, falling back to mtime-only tracking:`, err)
   }
-
-  watcher.on('add', handleFile)
-  watcher.on('change', handleFile)
-  watcher.on('error', (e) => console.error('[activity] watcher error:', projectPath, e))
-
-  watchers.set(projectPath, watcher)
 }
 
 // ── Project initialisation ─────────────────────────────────────────────────────
@@ -930,6 +937,10 @@ ipcMain.handle('shell:open-path', (_e, filePath: string): void => {
   shell.openPath(filePath)
 })
 
+ipcMain.handle('shell:open-external', (_e, url: string): void => {
+  shell.openExternal(url)
+})
+
 function ensureArchiveFolder(rootPath: string): void {
   fs.mkdirSync(path.join(rootPath, '_Archive'), { recursive: true })
 }
@@ -1128,3 +1139,101 @@ ipcMain.handle(
     }
   }
 )
+
+// ── Project links ─────────────────────────────────────────────────────────────
+
+function linksPath(projectPath: string): string {
+  return path.join(projectPath, 'links.json')
+}
+
+function readLinks(projectPath: string): ProjectLink[] {
+  const p = linksPath(projectPath)
+  if (!fs.existsSync(p)) return []
+  try { return JSON.parse(fs.readFileSync(p, 'utf-8')) } catch { return [] }
+}
+
+function writeLinks(projectPath: string, links: ProjectLink[]): void {
+  fs.writeFileSync(linksPath(projectPath), JSON.stringify(links, null, 2), 'utf-8')
+}
+
+function fetchUrl(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http
+    const req = mod.get(url, { timeout: 5000 }, (res) => {
+      // Follow one redirect
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        fetchUrl(res.headers.location).then(resolve).catch(reject)
+        return
+      }
+      let body = ''
+      res.setEncoding('utf-8')
+      res.on('data', (chunk) => { body += chunk })
+      res.on('end', () => resolve(body))
+    })
+    req.on('error', reject)
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')) })
+  })
+}
+
+function extractMeta(html: string): { title: string; description: string } {
+  const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i)
+  const descMatch  = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)
+                  ?? html.match(/<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i)
+  return {
+    title:       titleMatch ? titleMatch[1].trim() : '',
+    description: descMatch  ? descMatch[1].trim()  : '',
+  }
+}
+
+ipcMain.handle('fs:get-links', (_e, projectPath: string): IpcResult<ProjectLink[]> => {
+  try {
+    return { success: true, data: readLinks(projectPath) }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:save-link', async (_e, { projectPath, url }: { projectPath: string; url: string }): Promise<IpcResult<ProjectLink>> => {
+  try {
+    let title = url
+    let description = ''
+    let favicon = ''
+
+    try {
+      const parsed = new URL(url)
+      favicon = `${parsed.protocol}//${parsed.hostname}/favicon.ico`
+      const html = await fetchUrl(url)
+      const meta = extractMeta(html)
+      if (meta.title) title = meta.title
+      description = meta.description
+    } catch {
+      // metadata fetch failed — use url as title, leave others empty
+    }
+
+    const newLink: ProjectLink = {
+      id: uuidv4(),
+      url,
+      title,
+      description,
+      favicon,
+      createdAt: new Date().toISOString(),
+    }
+
+    const links = readLinks(projectPath)
+    links.push(newLink)
+    writeLinks(projectPath, links)
+    return { success: true, data: newLink }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:delete-link', (_e, { projectPath, linkId }: { projectPath: string; linkId: string }): IpcResult<void> => {
+  try {
+    const links = readLinks(projectPath).filter((l) => l.id !== linkId)
+    writeLinks(projectPath, links)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})

@@ -95,3 +95,12 @@ export interface IpcResult<T> {
   data?: T
   error?: string
 }
+
+export interface ProjectLink {
+  id: string
+  url: string
+  title: string
+  description: string
+  favicon: string
+  createdAt: string
+}

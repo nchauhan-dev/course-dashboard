@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
 import { api } from '../lib/api'
@@ -6,7 +7,7 @@ import CalendarPanel from '../components/CalendarPanel'
 import FileTree from '../components/FileTree'
 import Header from '../components/Header'
 import { USE_NEW_SIDEBAR } from '../App'
-import type { Assignment } from '../../../../types/index'
+import type { Assignment, ProjectLink } from '../../../../types/index'
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -57,6 +58,14 @@ export default function ProjectDetail() {
   const [activitySessions, setActivitySessions] = useState<{ start: string; end: string; durationMinutes: number }[]>([])
   const [projectCreatedAt, setProjectCreatedAt] = useState<string | null>(null)
 
+  // Resource Hub
+  const [links, setLinks] = useState<ProjectLink[] | null>(null)
+  const [isAddingLink, setIsAddingLink] = useState(false)
+  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [isSavingLink, setIsSavingLink] = useState(false)
+  const [isLinkDragOver, setIsLinkDragOver] = useState(false)
+  const [openLinkMenu, setOpenLinkMenu] = useState<{ linkId: string; x: number; y: number } | null>(null)
+
   // Assignment modal
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null)
 
@@ -92,6 +101,10 @@ export default function ProjectDetail() {
     })
     api.getProjectMeta(project.path).then((res) => {
       if (res.success && res.data) setProjectCreatedAt(res.data.createdAt)
+    })
+    api.getLinks(project.path).then((res) => {
+      if (res.success && res.data) setLinks(res.data)
+      else setLinks([])
     })
   }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -181,6 +194,14 @@ export default function ProjectDetail() {
     }
     return days
   }, [activitySessions, projectCreatedAt])
+
+  // Close link context menu on outside click
+  useEffect(() => {
+    if (!openLinkMenu) return
+    const handler = () => setOpenLinkMenu(null)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [openLinkMenu])
 
   if (!project) {
     return (
@@ -307,7 +328,7 @@ export default function ProjectDetail() {
             key={fileTreeKey}
             rootPath={project.path}
             naked
-            exclude={['Assignments']}
+            exclude={['Assignments', 'activity.json', 'project.md', 'links.json']}
             onStatsReady={(files, bytes) => setTreeStats({ files, bytes })}
           />
         </div>
@@ -449,12 +470,247 @@ export default function ProjectDetail() {
           </div>
 
           {/* Resource Hub */}
-          <div style={{ marginBottom: 24 }}>
-            <p style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-mute)', marginBottom: 10 }}>Resource Hub</p>
-            <div style={{ padding: 20 }} />
+          <div
+            style={{
+              marginBottom: 24,
+              borderRadius: 10,
+              padding: isLinkDragOver ? '10px' : 0,
+              background: isLinkDragOver ? 'var(--color-border-s)' : 'transparent',
+              border: isLinkDragOver ? '1px dashed var(--color-border)' : '1px dashed transparent',
+              transition: 'background 120ms ease, border-color 120ms ease, padding 120ms ease',
+            }}
+            onDragOver={(e) => { e.preventDefault(); setIsLinkDragOver(true) }}
+            onDragEnter={(e) => { e.preventDefault(); setIsLinkDragOver(true) }}
+            onDragLeave={() => setIsLinkDragOver(false)}
+            onDrop={async (e) => {
+              e.preventDefault()
+              setIsLinkDragOver(false)
+              const url = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')).trim()
+              if (!url || !url.startsWith('http') || !project) return
+              setIsSavingLink(true)
+              await api.saveLink(project.path, url)
+              const res = await api.getLinks(project.path)
+              if (res.success && res.data) setLinks(res.data)
+              setIsSavingLink(false)
+            }}
+          >
+            <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+              <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-mute)' }}>
+                Resource Hub
+              </span>
+              <button
+                onClick={() => setIsAddingLink(true)}
+                style={{
+                  width: 22, height: 22, borderRadius: 6, border: '1px solid var(--color-border)',
+                  background: 'transparent', color: 'var(--color-mute)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+                  fontSize: 16, lineHeight: 1,
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                  <path d="M6 1v10M1 6h10" />
+                </svg>
+              </button>
+            </div>
+
+            {isAddingLink && (
+              <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
+                <input
+                  autoFocus
+                  type="url"
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  placeholder="Paste a URL and press Enter..."
+                  disabled={isSavingLink}
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Escape') {
+                      setIsAddingLink(false)
+                      setNewLinkUrl('')
+                      return
+                    }
+                    if (e.key === 'Enter') {
+                      const url = newLinkUrl.trim()
+                      if (!url || !project) return
+                      setIsSavingLink(true)
+                      await api.saveLink(project.path, url)
+                      const res = await api.getLinks(project.path)
+                      if (res.success && res.data) setLinks(res.data)
+                      setIsSavingLink(false)
+                      setIsAddingLink(false)
+                      setNewLinkUrl('')
+                    }
+                  }}
+                  className="sidebar-input flex-1 min-w-0"
+                  style={{ fontSize: 13, color: 'var(--color-ink2)', opacity: isSavingLink ? 0.5 : 1 }}
+                />
+                {isSavingLink && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
+                    style={{ color: 'var(--color-mute)', flexShrink: 0, animation: 'spin 0.8s linear infinite' }}>
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                  </svg>
+                )}
+              </div>
+            )}
+
+            {isSavingLink && !isAddingLink && (
+              <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
+                  style={{ color: 'var(--color-mute)', animation: 'spin 0.8s linear infinite' }}>
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+                <span style={{ fontSize: 12, color: 'var(--color-mute)' }}>Saving link…</span>
+              </div>
+            )}
+
+            {links !== null && links.length === 0 && !isAddingLink ? (
+              <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: 'var(--color-mute)' }}>
+                Drop a link or click + to add
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+                {(links ?? []).map((link) => {
+                  let domain = ''
+                  try { domain = new URL(link.url).hostname.replace(/^www\./, '') } catch { /* ignore */ }
+
+                  // Clean title: strip path separators, take last meaningful segment
+                  const rawTitle = link.title || link.url
+                  const cleanTitle = rawTitle.includes('\\') || rawTitle.includes('/')
+                    ? rawTitle.split(/[\\\/]/).map(s => s.trim()).filter(Boolean).pop() ?? rawTitle
+                    : rawTitle
+
+                  // Seeded gradient from domain name
+                  function domainColor(seed: string, offset: number): string {
+                    let h = 0
+                    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+                    return `hsl(${(h + offset) % 360}, 45%, 55%)`
+                  }
+                  const c1 = domainColor(domain, 0)
+                  const c2 = domainColor(domain, 60)
+
+                  return (
+                    <div
+                      key={link.id}
+                      onClick={(e) => setOpenLinkMenu({ linkId: link.id, x: e.clientX, y: e.clientY })}
+                      style={{
+                        background: 'var(--color-panel)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 10,
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {/* Thumbnail */}
+                      <div style={{
+                        height: 80,
+                        background: `linear-gradient(135deg, ${c1}, ${c2})`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        {link.favicon ? (
+                          <img
+                            src={link.favicon}
+                            alt=""
+                            width={24}
+                            height={24}
+                            style={{ borderRadius: 4 }}
+                            onError={(e) => {
+                              const el = e.currentTarget
+                              el.style.display = 'none'
+                              const letter = el.parentElement?.querySelector('.link-letter') as HTMLElement | null
+                              if (letter) letter.style.display = 'flex'
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className="link-letter"
+                          style={{
+                            display: link.favicon ? 'none' : 'flex',
+                            width: 32, height: 32, borderRadius: 8,
+                            background: 'rgba(255,255,255,0.25)',
+                            alignItems: 'center', justifyContent: 'center',
+                            fontSize: 15, fontWeight: 600, color: '#fff',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {domain.charAt(0) || '?'}
+                        </div>
+                      </div>
+                      {/* Title */}
+                      <div style={{
+                        fontSize: 12, fontWeight: 500, color: 'var(--color-ink)',
+                        padding: '8px 10px 4px',
+                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                        lineHeight: 1.4,
+                      }}>
+                        {cleanTitle}
+                      </div>
+                      {/* Domain */}
+                      <div style={{ fontSize: 11, color: 'var(--color-mute)', padding: '0 10px 8px' }}>
+                        {domain}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
       </main>
+
+      {/* Link context menu portal */}
+      {openLinkMenu && (() => {
+        const menuLink = (links ?? []).find(l => l.id === openLinkMenu.linkId)
+        if (!menuLink) return null
+        const rowStyle: React.CSSProperties = {
+          padding: '8px 12px', cursor: 'pointer', fontSize: 13,
+          color: 'var(--color-ink)', transition: 'background 80ms ease',
+        }
+        return createPortal(
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed', top: openLinkMenu.y, left: openLinkMenu.x,
+              zIndex: 9999, width: 160,
+              background: 'var(--color-panel)', border: '1px solid var(--color-border)',
+              borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={rowStyle}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => { console.log('openExternal url:', menuLink.url); api.openExternal(menuLink.url).then(res => console.log('openExternal result:', res)); setOpenLinkMenu(null) }}
+            >
+              Open in Browser
+            </div>
+            <div
+              style={rowStyle}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => { navigator.clipboard.writeText(menuLink.url); setOpenLinkMenu(null) }}
+            >
+              Copy URL
+            </div>
+            <div
+              style={{ ...rowStyle, color: 'var(--color-danger)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={async () => {
+                setOpenLinkMenu(null)
+                if (!project) return
+                await api.deleteLink(project.path, menuLink.id)
+                const res = await api.getLinks(project.path)
+                if (res.success && res.data) setLinks(res.data)
+              }}
+            >
+              Delete
+            </div>
+          </div>,
+          document.body
+        )
+      })()}
 
       </div>{/* end columns */}
 

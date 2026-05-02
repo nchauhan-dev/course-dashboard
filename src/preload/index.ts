@@ -48,5 +48,10 @@ contextBridge.exposeInMainWorld('api', {
   restoreArchiveItem: (params: { itemPath: string; rootPath: string }) =>
     ipcRenderer.invoke('fs:restore-archive-item', params),
   deletePermanent: (params: { itemPath: string }) =>
-    ipcRenderer.invoke('fs:delete-permanent', params)
+    ipcRenderer.invoke('fs:delete-permanent', params),
+
+  getLinks: (projectPath: string) => ipcRenderer.invoke('fs:get-links', projectPath),
+  saveLink: (projectPath: string, url: string) => ipcRenderer.invoke('fs:save-link', { projectPath, url }),
+  deleteLink: (projectPath: string, linkId: string) => ipcRenderer.invoke('fs:delete-link', { projectPath, linkId }),
+  openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url)
 })

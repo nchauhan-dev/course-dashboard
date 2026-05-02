@@ -573,7 +573,7 @@ export default function NewSidebar() {
                     key={fileTreeKey}
                     rootPath={currentProject.path}
                     naked
-                    exclude={['.git']}
+                    exclude={['.git', 'activity.json', 'project.md', 'links.json']}
                     onStatsReady={(files, bytes) => setTreeStats({ files, bytes })}
                   />
                 </>
