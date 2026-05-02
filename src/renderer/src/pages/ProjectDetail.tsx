@@ -84,10 +84,8 @@ export default function ProjectDetail() {
     setOpenAssignmentId(null)
   }, [openAssignmentId, project, openAssignmentModal])
 
-  // Notes (Description + Outcome)
-  const [noteDescription, setNoteDescription] = useState('')
+  // Notes (Outcome)
   const [noteOutcome, setNoteOutcome] = useState('')
-  const descRef = useRef<HTMLTextAreaElement>(null)
   const outcomeRef = useRef<HTMLTextAreaElement>(null)
 
   // Drop-onto-project-root
@@ -112,15 +110,12 @@ export default function ProjectDetail() {
     if (!project) return
     api.getProjectNotes(project.path).then((res) => {
       if (res.success && res.data) {
-        setNoteDescription(res.data.description)
         setNoteOutcome(res.data.outcome)
-        // Grow textareas to fit loaded content
+        // Grow textarea to fit loaded content
         requestAnimationFrame(() => {
-          for (const ref of [descRef, outcomeRef]) {
-            if (ref.current) {
-              ref.current.style.height = 'auto'
-              ref.current.style.height = ref.current.scrollHeight + 'px'
-            }
+          if (outcomeRef.current) {
+            outcomeRef.current.style.height = 'auto'
+            outcomeRef.current.style.height = outcomeRef.current.scrollHeight + 'px'
           }
         })
       }
@@ -328,7 +323,7 @@ export default function ProjectDetail() {
             key={fileTreeKey}
             rootPath={project.path}
             naked
-            exclude={['Assignments', 'activity.json', 'project.md', 'links.json']}
+            exclude={['Assignments']}
             onStatsReady={(files, bytes) => setTreeStats({ files, bytes })}
           />
         </div>
@@ -367,6 +362,11 @@ export default function ProjectDetail() {
               <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--color-ink)', margin: 0, lineHeight: 1.1 }}>
                 {project.name}
               </h1>
+              {project.description && (
+                <p style={{ fontSize: 14, color: 'var(--color-mute)', margin: 0, marginTop: 4 }}>
+                  {project.description}
+                </p>
+              )}
             </div>
             <button
               onClick={() => setShowNewAssignment(true)}
@@ -389,84 +389,42 @@ export default function ProjectDetail() {
             </button>
           </div>
 
-          {/* Analytics — 1/3 donut + 2/3 assignments list */}
-          <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'stretch' }}>
-
-            {/* Donut container — 1/3 */}
-            <div style={{ flex: '0 0 33.333%', padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-              <DonutChart overdue={projectStats.overdue} remaining={projectStats.remaining} completed={projectStats.completed} />
-              {/* Legend — vertical stack, centered */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7, alignSelf: 'center', minWidth: 130 }}>
-                {[
-                  { label: 'Overdue',   value: projectStats.overdue,   color: 'var(--color-danger)' },
-                  { label: 'Remaining', value: projectStats.remaining, color: 'var(--accent)' },
-                  { label: 'Completed', value: projectStats.completed, color: 'var(--color-success)' },
-                ].map((item) => (
-                  <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: item.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11.5, color: 'var(--color-ink2)', flex: 1 }}>{item.label}</span>
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--color-ink)', fontFamily: '"Geist Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Notes container — 2/3 */}
-            <div style={{ flex: '0 0 calc(66.667% - 12px)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Description */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400, letterSpacing: '0.02em' }}>Description</span>
-                  <span style={{ fontSize: 10.5, color: countWords(noteDescription) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
-                    {countWords(noteDescription)} / 100
-                  </span>
+          {/* Outcome card */}
+          <div style={{
+            marginBottom: 24,
+              background: 'var(--color-panel)', border: '1px solid var(--color-border)',
+              borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 10,
+            }}>
+              {/* Card header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-mute)', flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="12" r="6" />
+                    <circle cx="12" cy="12" r="2" />
+                  </svg>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-ink)' }}>Outcome</span>
                 </div>
-                <textarea
-                  ref={descRef}
-                  value={noteDescription}
-                  placeholder="Add a project description..."
-                  rows={2}
-                  onChange={(e) => {
-                    if (countWords(e.target.value) > 100) return
-                    setNoteDescription(e.target.value)
-                    e.target.style.height = 'auto'
-                    e.target.style.height = e.target.scrollHeight + 'px'
-                  }}
-                  onBlur={() => api.setProjectNotes(project.path, noteDescription, noteOutcome)}
-                  className="note-input"
-                  style={{ width: '100%', resize: 'none', overflow: 'hidden', fontSize: 13, lineHeight: 1.6, color: 'var(--color-ink)', padding: 0 }}
-                />
+                <span style={{ fontSize: 10.5, color: countWords(noteOutcome) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
+                  {countWords(noteOutcome)} / 100
+                </span>
               </div>
-
-              {/* Divider */}
-              <div style={{ borderTop: '1px solid var(--color-border)' }} />
-
-              {/* Outcome */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--color-ink)', fontWeight: 400, letterSpacing: '0.02em' }}>Outcome</span>
-                  <span style={{ fontSize: 10.5, color: countWords(noteOutcome) >= 100 ? 'var(--color-danger)' : 'var(--color-mute)', fontFamily: '"Geist Mono", monospace', fontVariantNumeric: 'tabular-nums' }}>
-                    {countWords(noteOutcome)} / 100
-                  </span>
-                </div>
-                <textarea
-                  ref={outcomeRef}
-                  value={noteOutcome}
-                  placeholder="Define your desired outcome..."
-                  rows={2}
-                  onChange={(e) => {
-                    if (countWords(e.target.value) > 100) return
-                    setNoteOutcome(e.target.value)
-                    e.target.style.height = 'auto'
-                    e.target.style.height = e.target.scrollHeight + 'px'
-                  }}
-                  onBlur={() => api.setProjectNotes(project.path, noteDescription, noteOutcome)}
-                  className="note-input"
-                  style={{ width: '100%', resize: 'none', overflow: 'hidden', fontSize: 13, lineHeight: 1.6, color: 'var(--color-ink)', padding: 0 }}
-                />
-              </div>
-            </div>
-
+              {/* Textarea */}
+              <textarea
+                ref={outcomeRef}
+                value={noteOutcome}
+                placeholder="Define your desired outcome..."
+                rows={2}
+                onChange={(e) => {
+                  if (countWords(e.target.value) > 100) return
+                  setNoteOutcome(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = e.target.scrollHeight + 'px'
+                }}
+                onBlur={() => api.setProjectNotes(project.path, '', noteOutcome)}
+                className="note-input"
+                style={{ width: '100%', resize: 'none', overflow: 'hidden', fontSize: 13, lineHeight: 1.6, color: 'var(--color-ink)', padding: 0, background: 'transparent', border: 'none' }}
+              />
           </div>
 
           {/* Resource Hub */}
@@ -597,23 +555,24 @@ export default function ProjectDetail() {
                         borderRadius: 10,
                         overflow: 'hidden',
                         cursor: 'pointer',
+                        display: 'flex', flexDirection: 'row', alignItems: 'center',
+                        gap: 10, padding: '8px 10px',
                       }}
                     >
-                      {/* Thumbnail */}
+                      {/* Icon square */}
                       <div style={{
-                        height: 80,
+                        width: 40, height: 40, flexShrink: 0,
+                        borderRadius: 8,
                         background: `linear-gradient(135deg, ${c1}, ${c2})`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
                         {link.favicon ? (
                           <img
                             src={link.favicon}
                             alt=""
-                            width={24}
-                            height={24}
-                            style={{ borderRadius: 4 }}
+                            width={20}
+                            height={20}
+                            style={{ borderRadius: 3 }}
                             onError={(e) => {
                               const el = e.currentTarget
                               el.style.display = 'none'
@@ -626,8 +585,6 @@ export default function ProjectDetail() {
                           className="link-letter"
                           style={{
                             display: link.favicon ? 'none' : 'flex',
-                            width: 32, height: 32, borderRadius: 8,
-                            background: 'rgba(255,255,255,0.25)',
                             alignItems: 'center', justifyContent: 'center',
                             fontSize: 15, fontWeight: 600, color: '#fff',
                             textTransform: 'uppercase',
@@ -636,18 +593,20 @@ export default function ProjectDetail() {
                           {domain.charAt(0) || '?'}
                         </div>
                       </div>
-                      {/* Title */}
-                      <div style={{
-                        fontSize: 12, fontWeight: 500, color: 'var(--color-ink)',
-                        padding: '8px 10px 4px',
-                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                        lineHeight: 1.4,
-                      }}>
-                        {cleanTitle}
-                      </div>
-                      {/* Domain */}
-                      <div style={{ fontSize: 11, color: 'var(--color-mute)', padding: '0 10px 8px' }}>
-                        {domain}
+                      {/* Text */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: 12, fontWeight: 500, color: 'var(--color-ink)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {cleanTitle}
+                        </div>
+                        <div style={{
+                          fontSize: 11, color: 'var(--color-mute)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {domain}
+                        </div>
                       </div>
                     </div>
                   )

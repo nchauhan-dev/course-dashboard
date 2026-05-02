@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { TreeNode, Project, CalendarEvent } from '../../../../types/index'
+import type { TreeNode, Project, CalendarEvent, ProjectLink } from '../../../../types/index'
 import { api } from '../lib/api'
 import { useApp } from '../store/AppContext'
 
@@ -29,6 +29,12 @@ function formatDueDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function domainColor(seed: string, offset: number): string {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return `hsl(${(h + offset) % 360}, 45%, 55%)`
+}
+
 const sectionLabelStyle: React.CSSProperties = {
   fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
   textTransform: 'uppercase', color: 'var(--color-mute)',
@@ -46,6 +52,8 @@ export default function SearchBar({ scope, placeholder = 'Search…', projectPat
   const [fileTree, setFileTree] = useState<TreeNode[] | null>(null)
   const [isLoadingFiles, setIsLoadingFiles] = useState(false)
   const [fileResults, setFileResults] = useState<TreeNode[]>([])
+  const [allLinks, setAllLinks] = useState<ProjectLink[]>([])
+  const [linkResults, setLinkResults] = useState<ProjectLink[]>([])
 
   // Global scope state
   const [projectResults, setProjectResults] = useState<Project[]>([])
@@ -72,6 +80,8 @@ export default function SearchBar({ scope, placeholder = 'Search…', projectPat
       setGlobalFileTree(null)
       setQuery('')
       setFileResults([])
+      setLinkResults([])
+      setAllLinks([])
       setProjectResults([])
       setAssignmentResults([])
       setGlobalFileResults([])
@@ -84,6 +94,9 @@ export default function SearchBar({ scope, placeholder = 'Search…', projectPat
           if (res.success && res.data) setFileTree(res.data)
         })
         .finally(() => setIsLoadingFiles(false))
+      api.getLinks(projectPath).then((res) => {
+        if (res.success && res.data) setAllLinks(res.data)
+      })
     }
     if (scope === 'global' && workspacePath) {
       api.readDirectory(workspacePath)
@@ -93,13 +106,14 @@ export default function SearchBar({ scope, placeholder = 'Search…', projectPat
     }
   }, [isOpen, scope, projectPath, workspacePath])
 
-  // Project scope: filter flat file list whenever query or tree changes
+  // Project scope: filter flat file list and links whenever query changes
   useEffect(() => {
     if (scope !== 'project') return
-    if (!query.trim()) { setFileResults([]); return }
+    if (!query.trim()) { setFileResults([]); setLinkResults([]); return }
     const q = query.toLowerCase()
     setFileResults(flatFiles.filter((n) => n.name.toLowerCase().includes(q)))
-  }, [query, flatFiles, scope])
+    setLinkResults(allLinks.filter((l) => l.title.toLowerCase().includes(q) || l.url.toLowerCase().includes(q)))
+  }, [query, flatFiles, allLinks, scope])
 
   // Global scope: filter projects, assignments, and files in memory
   useEffect(() => {
@@ -146,7 +160,7 @@ export default function SearchBar({ scope, placeholder = 'Search…', projectPat
 
   const hasQuery = query.trim() !== ''
   const globalNoResults = scope === 'global' && hasQuery && projectResults.length === 0 && assignmentResults.length === 0 && globalFileResults.length === 0
-  const projectNoResults = scope === 'project' && hasQuery && !isLoadingFiles && fileResults.length === 0
+  const projectNoResults = scope === 'project' && hasQuery && !isLoadingFiles && fileResults.length === 0 && linkResults.length === 0
 
   return (
     <div ref={containerRef} className="no-drag" style={{ position: 'relative', flexShrink: 0 }}>
@@ -251,7 +265,56 @@ export default function SearchBar({ scope, placeholder = 'Search…', projectPat
             </div>
           )}
 
+          {/* Links section (project scope) */}
+          {scope === 'project' && linkResults.length > 0 && (
+            <>
+              <span style={sectionLabelStyle}>Links</span>
+              {linkResults.map((link, index) => {
+                let domain = ''
+                try { domain = new URL(link.url).hostname.replace(/^www\./, '') } catch { /* ignore */ }
+                const c1 = domainColor(domain, 0)
+                const c2 = domainColor(domain, 60)
+                return (
+                  <button
+                    key={link.id}
+                    onClick={async () => { await api.openExternal(link.url); close() }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      height: 56, flexShrink: 0,
+                      padding: '0 14px',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      textAlign: 'left', width: '100%',
+                      transition: 'background-color 120ms ease',
+                      animation: 'sidebar-fade-in 200ms ease both',
+                      animationDelay: `${index * 40}ms`,
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                  >
+                    <div style={{
+                      width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                      background: `linear-gradient(135deg, ${c1}, ${c2})`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 9, fontWeight: 700, color: '#fff', textTransform: 'uppercase',
+                    }}>
+                      {domain.charAt(0) || '?'}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {link.title || link.url}
+                      </span>
+                      <span style={{ fontSize: 10.5, color: 'var(--color-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {domain}
+                      </span>
+                    </div>
+                  </button>
+                )
+              })}
+            </>
+          )}
+
           {/* File result rows */}
+          {scope === 'project' && fileResults.length > 0 && <span style={sectionLabelStyle}>Files</span>}
           {scope === 'project' && fileResults.map((node, index) => {
             const relativePath = projectPath && node.path.startsWith(projectPath)
               ? node.path.slice(projectPath.length).replace(/^[\\/]/, '')

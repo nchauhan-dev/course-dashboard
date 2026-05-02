@@ -43,6 +43,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  process.on('unhandledRejection', (reason) => {
+    console.warn('[main] unhandled rejection (suppressed):', reason)
+  })
+
   let vaultPath: string | null = null
 
   // 1. Sync migration — must complete before window loads
@@ -424,6 +428,8 @@ function startProjectWatcher(projectPath: string): void {
       followSymlinks: false,       // avoid infinite loops from circular symlinks
       awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
       ignored: (p: string) => isJunk(p),
+      usePolling: true,            // avoid FSEvents native module crash on macOS
+      interval: 2000,              // poll every 2s — low overhead for background tracking
     })
 
     function handleFile(filePath: string): void {
