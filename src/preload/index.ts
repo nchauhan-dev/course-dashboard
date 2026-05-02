@@ -53,5 +53,6 @@ contextBridge.exposeInMainWorld('api', {
   getLinks: (projectPath: string) => ipcRenderer.invoke('fs:get-links', projectPath),
   saveLink: (projectPath: string, url: string) => ipcRenderer.invoke('fs:save-link', { projectPath, url }),
   deleteLink: (projectPath: string, linkId: string) => ipcRenderer.invoke('fs:delete-link', { projectPath, linkId }),
+  saveRename: (projectPath: string, linkId: string, title: string) => ipcRenderer.invoke('fs:rename-link', { projectPath, linkId, title }),
   openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url)
 })

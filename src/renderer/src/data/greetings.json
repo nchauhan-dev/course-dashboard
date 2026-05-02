@@ -1,0 +1,65 @@
+[
+  {
+    "window": "early_morning",
+    "hours": [5, 6, 7],
+    "greetings": [
+      "Up before the world, {name}.",
+      "The early hours are yours, {name}.",
+      "First light. Let's make it count, {name}."
+    ]
+  },
+  {
+    "window": "morning",
+    "hours": [8, 9, 10, 11],
+    "greetings": [
+      "Good morning, {name}.",
+      "Morning, {name}. Ready to build?",
+      "A fresh start, {name}."
+    ]
+  },
+  {
+    "window": "afternoon",
+    "hours": [12, 13, 14, 15, 16],
+    "greetings": [
+      "Good afternoon, {name}.",
+      "Keep the momentum going, {name}.",
+      "Afternoon, {name}. Stay focused."
+    ]
+  },
+  {
+    "window": "evening",
+    "hours": [17, 18, 19, 20],
+    "greetings": [
+      "Good evening, {name}.",
+      "Winding down or just getting started, {name}?",
+      "Evening, {name}. One more push."
+    ]
+  },
+  {
+    "window": "night",
+    "hours": [21, 22, 23],
+    "greetings": [
+      "Still at it, {name}.",
+      "Night mode, {name}.",
+      "The quiet hours belong to you, {name}."
+    ]
+  },
+  {
+    "window": "late_night",
+    "hours": [0, 1],
+    "greetings": [
+      "Welcome, Night Owl.",
+      "Midnight grind, {name}.",
+      "The world's asleep. You're not, {name}."
+    ]
+  },
+  {
+    "window": "dead_of_night",
+    "hours": [2, 3, 4],
+    "greetings": [
+      "Burning the midnight oil, {name}.",
+      "Even the stars are tired, {name}.",
+      "This is dedication, {name}."
+    ]
+  }
+]

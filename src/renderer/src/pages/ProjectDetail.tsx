@@ -65,6 +65,12 @@ export default function ProjectDetail() {
   const [isSavingLink, setIsSavingLink] = useState(false)
   const [isLinkDragOver, setIsLinkDragOver] = useState(false)
   const [openLinkMenu, setOpenLinkMenu] = useState<{ linkId: string; x: number; y: number } | null>(null)
+  const [renamingLinkId, setRenamingLinkId] = useState<string | null>(null)
+  const [renameLinkValue, setRenameLinkValue] = useState('')
+  const isSavingRename = useRef(false)
+  const [linkSort, setLinkSort] = useState<'date_desc' | 'date_asc' | 'alpha_asc' | 'alpha_desc'>('date_desc')
+  const [sortMenuOpen, setSortMenuOpen] = useState(false)
+  const sortBtnRef = useRef<HTMLButtonElement>(null)
 
   // Assignment modal
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null)
@@ -190,6 +196,22 @@ export default function ProjectDetail() {
     return days
   }, [activitySessions, projectCreatedAt])
 
+  async function saveLinkRename(linkId: string, title: string) {
+    if (isSavingRename.current) return
+    const trimmed = title.trim()
+    if (!trimmed || !project) { setRenamingLinkId(null); setRenameLinkValue(''); return }
+    isSavingRename.current = true
+    try {
+      await api.saveRename(project.path, linkId, trimmed)
+      const res = await api.getLinks(project.path)
+      if (res.success && res.data) setLinks(res.data)
+      setRenamingLinkId(null)
+      setRenameLinkValue('')
+    } finally {
+      isSavingRename.current = false
+    }
+  }
+
   // Close link context menu on outside click
   useEffect(() => {
     if (!openLinkMenu) return
@@ -197,6 +219,14 @@ export default function ProjectDetail() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [openLinkMenu])
+
+  // Close sort menu on outside click
+  useEffect(() => {
+    if (!sortMenuOpen) return
+    const handler = () => setSortMenuOpen(false)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [sortMenuOpen])
 
   if (!project) {
     return (
@@ -456,19 +486,41 @@ export default function ProjectDetail() {
               <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-mute)' }}>
                 Resource Hub
               </span>
-              <button
-                onClick={() => setIsAddingLink(true)}
-                style={{
-                  width: 22, height: 22, borderRadius: 6, border: '1px solid var(--color-border)',
-                  background: 'transparent', color: 'var(--color-mute)', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
-                  fontSize: 16, lineHeight: 1,
-                }}
-              >
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                  <path d="M6 1v10M1 6h10" />
-                </svg>
-              </button>
+              <div className="flex items-center" style={{ gap: 6 }}>
+                {/* Sort dropdown button */}
+                <button
+                  ref={sortBtnRef}
+                  onMouseDown={(e) => { e.stopPropagation(); setSortMenuOpen(o => !o) }}
+                  style={{
+                    height: 22, borderRadius: 6, border: '1px solid var(--color-border)',
+                    background: sortMenuOpen ? 'var(--color-border-s)' : 'transparent',
+                    color: linkSort !== 'date_desc' ? 'var(--color-ink)' : 'var(--color-mute)',
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    cursor: 'pointer', padding: '0 6px',
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round">
+                    <path d="M1 3h10M2 6h7M3 9h5" />
+                  </svg>
+                  <span style={{ fontSize: 9.5, fontWeight: 500, letterSpacing: '0.02em', lineHeight: 1 }}>
+                    {linkSort === 'date_desc' ? 'Newest' : linkSort === 'date_asc' ? 'Oldest' : linkSort === 'alpha_asc' ? 'A→Z' : 'Z→A'}
+                  </span>
+                </button>
+                {/* Add link */}
+                <button
+                  onClick={() => setIsAddingLink(true)}
+                  style={{
+                    width: 22, height: 22, borderRadius: 6, border: '1px solid var(--color-border)',
+                    background: 'transparent', color: 'var(--color-mute)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+                    fontSize: 16, lineHeight: 1,
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                    <path d="M6 1v10M1 6h10" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {isAddingLink && (
@@ -526,7 +578,12 @@ export default function ProjectDetail() {
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-                {(links ?? []).map((link) => {
+                {[...(links ?? [])].sort((a, b) => {
+                  if (linkSort === 'alpha_asc') return (a.title || a.url).localeCompare(b.title || b.url)
+                  if (linkSort === 'alpha_desc') return (b.title || b.url).localeCompare(a.title || a.url)
+                  if (linkSort === 'date_asc') return a.createdAt.localeCompare(b.createdAt)
+                  return b.createdAt.localeCompare(a.createdAt)
+                }).map((link) => {
                   let domain = ''
                   try { domain = new URL(link.url).hostname.replace(/^www\./, '') } catch { /* ignore */ }
 
@@ -595,12 +652,28 @@ export default function ProjectDetail() {
                       </div>
                       {/* Text */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: 12, fontWeight: 500, color: 'var(--color-ink)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {cleanTitle}
-                        </div>
+                        {renamingLinkId === link.id ? (
+                          <input
+                            autoFocus
+                            value={renameLinkValue}
+                            onChange={e => setRenameLinkValue(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() }
+                              if (e.key === 'Escape') { setRenamingLinkId(null); setRenameLinkValue('') }
+                            }}
+                            onBlur={() => saveLinkRename(link.id, renameLinkValue)}
+                            onClick={e => e.stopPropagation()}
+                            className="sidebar-input"
+                            style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-ink)', width: '100%', padding: 0 }}
+                          />
+                        ) : (
+                          <div style={{
+                            fontSize: 12, fontWeight: 500, color: 'var(--color-ink)',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {cleanTitle}
+                          </div>
+                        )}
                         <div style={{
                           fontSize: 11, color: 'var(--color-mute)',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -640,6 +713,14 @@ export default function ProjectDetail() {
               style={rowStyle}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => { setOpenLinkMenu(null); setRenamingLinkId(menuLink.id); setRenameLinkValue(menuLink.title || menuLink.url) }}
+            >
+              Rename
+            </div>
+            <div
+              style={rowStyle}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               onClick={() => { console.log('openExternal url:', menuLink.url); api.openExternal(menuLink.url).then(res => console.log('openExternal result:', res)); setOpenLinkMenu(null) }}
             >
               Open in Browser
@@ -666,6 +747,59 @@ export default function ProjectDetail() {
             >
               Delete
             </div>
+          </div>,
+          document.body
+        )
+      })()}
+
+      {/* Sort dropdown portal */}
+      {sortMenuOpen && (() => {
+        const rect = sortBtnRef.current?.getBoundingClientRect()
+        if (!rect) return null
+        const options: { label: string; value: typeof linkSort }[] = [
+          { label: 'Newest First', value: 'date_desc' },
+          { label: 'Oldest First', value: 'date_asc' },
+          { label: 'A → Z',        value: 'alpha_asc' },
+          { label: 'Z → A',        value: 'alpha_desc' },
+        ]
+        const rowStyle: React.CSSProperties = {
+          padding: '7px 10px', cursor: 'pointer', fontSize: 12.5,
+          color: 'var(--color-ink)', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', gap: 8,
+          transition: 'background 80ms ease',
+        }
+        return createPortal(
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: rect.bottom + 4,
+              left: rect.left,
+              zIndex: 9999,
+              width: 140,
+              background: 'var(--color-panel)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              overflow: 'hidden',
+            }}
+          >
+            {options.map((opt) => (
+              <div
+                key={opt.value}
+                style={rowStyle}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                onClick={() => { setLinkSort(opt.value); setSortMenuOpen(false) }}
+              >
+                <span>{opt.label}</span>
+                {linkSort === opt.value && (
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)', flexShrink: 0 }}>
+                    <path d="M1.5 6.5 4.5 9.5 10.5 2.5" />
+                  </svg>
+                )}
+              </div>
+            ))}
           </div>,
           document.body
         )

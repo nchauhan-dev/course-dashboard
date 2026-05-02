@@ -65,6 +65,7 @@ declare global {
       getLinks: (projectPath: string) => Promise<IpcResult<ProjectLink[]>>
       saveLink: (projectPath: string, url: string) => Promise<IpcResult<ProjectLink>>
       deleteLink: (projectPath: string, linkId: string) => Promise<IpcResult<void>>
+      saveRename: (projectPath: string, linkId: string, title: string) => Promise<IpcResult<void>>
       openExternal: (url: string) => Promise<void>
     }
   }
@@ -117,5 +118,6 @@ export const api = {
   getLinks: (projectPath: string): Promise<IpcResult<ProjectLink[]>> => window.api.getLinks(projectPath),
   saveLink: (projectPath: string, url: string): Promise<IpcResult<ProjectLink>> => window.api.saveLink(projectPath, url),
   deleteLink: (projectPath: string, linkId: string): Promise<IpcResult<void>> => window.api.deleteLink(projectPath, linkId),
+  saveRename: (projectPath: string, linkId: string, title: string): Promise<IpcResult<void>> => window.api.saveRename(projectPath, linkId, title),
   openExternal: (url: string): Promise<void> => window.api.openExternal(url)
 }

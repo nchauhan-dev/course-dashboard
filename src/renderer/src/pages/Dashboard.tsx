@@ -4,6 +4,8 @@ import ProjectCard from '../components/ProjectCard'
 import CalendarPanel from '../components/CalendarPanel'
 import NewProjectModal from '../components/NewProjectModal'
 import Header from '../components/Header'
+import greetingsData from '../data/greetings.json'
+import quotesData from '../data/quotes_repository.json'
 
 // Stat helpers — local time so date boundaries match the user's clock
 function localDate(d: Date): string {
@@ -37,7 +39,7 @@ const chevBtn: React.CSSProperties = {
 }
 
 export default function Dashboard() {
-  const { projects, calendarEvents, userName, openAssignmentModal } = useApp()
+  const { projects, calendarEvents, userName, openAssignmentModal, dashboardPage, setDashboardPage } = useApp()
   const [showNewProject, setShowNewProject] = useState(false)
 
   // Lifted calendar nav state
@@ -62,21 +64,38 @@ export default function Dashboard() {
     return { overdue, dueToday, thisWeek, total }
   }, [calendarEvents])
 
-  const greeting = userName ? `Good morning, ${userName}.` : 'Good morning.'
+  // Dynamic greeting + quote — rotate by day-of-year and hour
+  const { greeting, quote } = useMemo(() => {
+    const now = new Date()
+    const currentHour = now.getHours()
+    const dayOfYear = Math.floor((Date.now() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000)
+
+    // Greeting
+    const window = greetingsData.find((w) => w.hours.includes(currentHour)) ?? greetingsData[1]
+    const rawGreeting = window.greetings[dayOfYear % 3]
+    const greeting = userName
+      ? rawGreeting.replace('{name}', userName)
+      : rawGreeting.replace(', {name}', '').replace(' {name}', '')
+
+    // Quote
+    const allQuotes = quotesData.flatMap((cat) => cat.quotes)
+    const quote = allQuotes[(dayOfYear * 24 + currentHour) % allQuotes.length]
+
+    return { greeting, quote }
+  }, [userName])
 
   // Swipe to reveal stat strip + projects
-  const [currentPage, setCurrentPage] = useState(0)
   const isTransitioning = useRef(false)
 
   function handleWheel(e: React.WheelEvent) {
     if (isTransitioning.current) return
-    if (e.deltaY > 30 && currentPage === 0) {
+    if (e.deltaY > 30 && dashboardPage === 0) {
       isTransitioning.current = true
-      setCurrentPage(1)
+      setDashboardPage(1)
       setTimeout(() => { isTransitioning.current = false }, 800)
-    } else if (e.deltaY < -30 && currentPage === 1) {
+    } else if (e.deltaY < -30 && dashboardPage === 1) {
       isTransitioning.current = true
-      setCurrentPage(0)
+      setDashboardPage(0)
       setTimeout(() => { isTransitioning.current = false }, 800)
     }
   }
@@ -100,8 +119,8 @@ export default function Dashboard() {
             className="grid"
             style={{
               gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)',
-              opacity: currentPage === 1 ? 1 : 0,
-              pointerEvents: currentPage === 1 ? 'auto' : 'none',
+              opacity: dashboardPage === 1 ? 1 : 0,
+              pointerEvents: dashboardPage === 1 ? 'auto' : 'none',
               transition: 'opacity 400ms ease',
             }}
           >
@@ -143,13 +162,13 @@ export default function Dashboard() {
                 fontSize: 14.5, lineHeight: 1.5, color: 'var(--color-ink2)',
                 letterSpacing: '0.02em', fontWeight: 300, opacity: 0.75,
               }}>
-                "It's not what we do once in a while that shapes our lives. It's what we do consistently."
+                "{quote.text}"
               </blockquote>
               <figcaption style={{
                 marginTop: 5, fontSize: 10, color: 'var(--color-mute)',
                 letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 500, opacity: 0.5,
               }}>
-                — Tony Robbins
+                — {quote.author}
               </figcaption>
             </figure>
           </div>
@@ -157,8 +176,8 @@ export default function Dashboard() {
           {/* Projects — fades in on swipe down */}
           <div style={{
             padding: '28px 30px',
-            opacity: currentPage === 1 ? 1 : 0,
-            pointerEvents: currentPage === 1 ? 'auto' : 'none',
+            opacity: dashboardPage === 1 ? 1 : 0,
+            pointerEvents: dashboardPage === 1 ? 'auto' : 'none',
             transition: 'opacity 400ms ease',
           }}>
             <div className="flex items-baseline gap-3" style={{ marginBottom: 14 }}>

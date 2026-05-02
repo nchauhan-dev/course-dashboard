@@ -1,0 +1,102 @@
+[
+    {
+        "category": "Philosophers and Ancient Thinkers",
+        "quotes": [
+            {
+                "text": "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",
+                "author": "Will Durant (summarizing Aristotle)"
+            },
+            {
+                "text": "First say to yourself what you would be; and then do what you have to do.",
+                "author": "Epictetus"
+            },
+            {
+                "text": "Drop by drop is the water pot filled. Likewise, the wise man, gathering it little by little, fills himself with good.",
+                "author": "Gautama Buddha"
+            },
+            {
+                "text": "It does not matter how slowly you go as long as you do not stop.",
+                "author": "Confucius"
+            },
+            {
+                "text": "No great thing is created suddenly.",
+                "author": "Epictetus"
+            }
+        ]
+    },
+    {
+        "category": "Modern Innovators",
+        "quotes": [
+            {
+                "text": "I'm convinced that about half of what separates the successful entrepreneurs from the non-successful ones is pure perseverance.",
+                "author": "Steve Jobs"
+            },
+            {
+                "text": "Persistence is very important. You should not give up unless you are forced to give up.",
+                "author": "Elon Musk"
+            },
+            {
+                "text": "When something is important enough, you do it even if the odds are not in your favor.",
+                "author": "Elon Musk"
+            },
+            {
+                "text": "Play iterated games. All the returns in life, whether in wealth, relationships, or knowledge, come from compound interest.",
+                "author": "Naval Ravikant"
+            },
+            {
+                "text": "Things don't have to change the world to be important.",
+                "author": "Steve Jobs"
+            }
+        ]
+    },
+    {
+        "category": "Historical Figures and Scientists",
+        "quotes": [
+            {
+                "text": "It's not that I'm so smart, it's just that I stay with problems longer.",
+                "author": "Albert Einstein"
+            },
+            {
+                "text": "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+                "author": "Winston Churchill"
+            },
+            {
+                "text": "Our greatest weakness lies in giving up. The most certain way to succeed is always to try just one more time.",
+                "author": "Thomas Edison"
+            },
+            {
+                "text": "Energy and persistence conquer all things.",
+                "author": "Benjamin Franklin"
+            },
+            {
+                "text": "I am a slow walker, but I never walk back.",
+                "author": "Abraham Lincoln"
+            },
+            {
+                "text": "Life is not easy for any of us. But what of that? We must have perseverance and above all confidence in ourselves.",
+                "author": "Marie Curie"
+            }
+        ]
+    },
+    {
+        "category": "Writers, Thinkers, and Builders",
+        "quotes": [
+            {
+                "text": "That which we persist in doing becomes easier for us to do; not that the nature of the thing itself is changed, but that our power to do is increased.",
+                "author": "Ralph Waldo Emerson"
+            },
+            {
+                "text": "Long-term consistency trumps short-term intensity.",
+                "author": "Bruce Lee"
+            },
+            {
+                "text": "Amateurs sit and wait for inspiration, the rest of us just get up and go to work.",
+                "author": "Stephen King"
+            },
+            {
+                "text": "The secret of getting ahead is getting started.",
+                "author": "Mark Twain"
+            }
+        ]
+    }
+]

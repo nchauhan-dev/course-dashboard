@@ -26,12 +26,16 @@ interface AppContextValue extends AppState {
   openAssignment: { projectId: string; assignmentId: string } | null
   openAssignmentModal: (projectId: string, assignmentId: string) => void
   closeAssignmentModal: () => void
+  // Dashboard page persistence
+  dashboardPage: number
+  setDashboardPage: (page: number) => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [openAssignment, setOpenAssignment] = useState<{ projectId: string; assignmentId: string } | null>(null)
+  const [dashboardPage, setDashboardPage] = useState(0)
 
   const openAssignmentModal = useCallback((projectId: string, assignmentId: string) => {
     setOpenAssignment({ projectId, assignmentId })
@@ -161,6 +165,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         openAssignment,
         openAssignmentModal,
         closeAssignmentModal,
+        dashboardPage,
+        setDashboardPage,
       }}
     >
       {children}

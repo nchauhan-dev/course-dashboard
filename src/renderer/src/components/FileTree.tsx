@@ -8,6 +8,7 @@ interface Props {
   naked?: boolean       // strip border/bg wrapper — use inside a sidebar
   exclude?: string[]    // folder/file names to hide at the root level
   onStatsReady?: (files: number, bytes: number) => void
+  refreshKey?: number   // increment to reload tree data without remounting
 }
 
 function countStats(nodes: TreeNode[]): { files: number; bytes: number } {
@@ -26,11 +27,24 @@ function countStats(nodes: TreeNode[]): { files: number; bytes: number } {
   return { files, bytes }
 }
 
-export default function FileTree({ rootPath, naked, exclude, onStatsReady }: Props) {
+export default function FileTree({ rootPath, naked, exclude, onStatsReady, refreshKey }: Props) {
   const [nodes, setNodes] = useState<TreeNode[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRootDragOver, setIsRootDragOver] = useState(false)
   const rootDragCounter = useRef(0)
+  const isFirstRender = useRef(true)
+
+  // Lifted expanded state — never reset by load(), only toggled by user
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
+
+  function toggleExpanded(path: string) {
+    setExpandedPaths(prev => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -49,6 +63,12 @@ export default function FileTree({ rootPath, naked, exclude, onStatsReady }: Pro
   }, [rootPath]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
+
+  // Reload when refreshKey increments, but skip the initial mount
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    load()
+  }, [refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Root-level drop zone ───────────────────────────────────────────────────
   // Directory rows call stopPropagation on their drag events, so this only
@@ -110,7 +130,17 @@ export default function FileTree({ rootPath, naked, exclude, onStatsReady }: Pro
         </p>
       ) : (
         nodes.map((node, index) => (
-          <TreeNodeRow key={node.path} node={node} depth={0} onRefresh={load} naked={naked} animationIndex={index} />
+          <TreeNodeRow
+            key={node.path}
+            node={node}
+            depth={0}
+            onRefresh={load}
+            naked={naked}
+            animationIndex={index}
+            isExpanded={expandedPaths.has(node.path)}
+            onToggleExpand={toggleExpanded}
+            expandedPaths={expandedPaths}
+          />
         ))
       )}
     </div>
@@ -123,14 +153,19 @@ function TreeNodeRow({
   onRefresh,
   naked,
   animationIndex,
+  isExpanded,
+  onToggleExpand,
+  expandedPaths,
 }: {
   node: TreeNode
   depth: number
   onRefresh: () => void
   naked?: boolean
   animationIndex?: number
+  isExpanded: boolean
+  onToggleExpand: (path: string) => void
+  expandedPaths: Set<string>
 }) {
-  const [expanded, setExpanded] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -180,8 +215,8 @@ function TreeNodeRow({
     await api.createFolder(fullPath)
     setCreating(false)
     setNewFolderName('')
-    setExpanded(true)
-    onRefresh()
+    if (!isExpanded) onToggleExpand(node.path)
+    setTimeout(() => onRefresh(), 50)
   }
 
   function cancelCreate() {
@@ -210,7 +245,7 @@ function TreeNodeRow({
     setIsDragOver(true)
     if (!expandTimer.current) {
       expandTimer.current = setTimeout(() => {
-        setExpanded(true)
+        if (!isExpanded) onToggleExpand(node.path)
         expandTimer.current = null
       }, 800)
     }
@@ -256,7 +291,7 @@ function TreeNodeRow({
     }
 
     setDropSuccess(true)
-    setExpanded(true)
+    if (!isExpanded) onToggleExpand(node.path)
     onRefresh()
 
     if (successTimer.current) clearTimeout(successTimer.current)
@@ -305,10 +340,15 @@ function TreeNodeRow({
             style={{ borderColor: 'var(--color-border)', background: 'var(--color-panel)', color: 'var(--color-ink)' }}
           />
         </form>
-        {node.isDirectory && expanded && (
+        {node.isDirectory && isExpanded && (
           <div>
             {(node.children ?? []).map((child) => (
-              <TreeNodeRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked} />
+              <TreeNodeRow
+                key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked}
+                isExpanded={expandedPaths.has(child.path)}
+                onToggleExpand={onToggleExpand}
+                expandedPaths={expandedPaths}
+              />
             ))}
           </div>
         )}
@@ -349,10 +389,15 @@ function TreeNodeRow({
             Cancel
           </button>
         </div>
-        {node.isDirectory && expanded && (
+        {node.isDirectory && isExpanded && (
           <div>
             {(node.children ?? []).map((child) => (
-              <TreeNodeRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked} />
+              <TreeNodeRow
+                key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked}
+                isExpanded={expandedPaths.has(child.path)}
+                onToggleExpand={onToggleExpand}
+                expandedPaths={expandedPaths}
+              />
             ))}
           </div>
         )}
@@ -378,11 +423,11 @@ function TreeNodeRow({
         {node.isDirectory ? (
           <>
             <button
-              onClick={() => setExpanded(!expanded)}
+              onClick={() => onToggleExpand(node.path)}
               className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-gray-400 hover:text-gray-600"
             >
               <svg
-                className={`h-3.5 w-3.5 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+                className={`h-3.5 w-3.5 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -401,10 +446,10 @@ function TreeNodeRow({
             </svg>
 
             <button
-              onClick={() => setExpanded(!expanded)}
+              onClick={() => onToggleExpand(node.path)}
               className="flex-1 min-w-0 text-left"
             >
-              <span className="truncate text-sm text-gray-700">{node.name}</span>
+              <span className="truncate text-sm" style={{ color: 'var(--color-ink)' }}>{node.name}</span>
             </button>
 
             {(isHovered || menuOpen) && (
@@ -415,7 +460,13 @@ function TreeNodeRow({
               >
                 <button
                   type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); console.log('[FileTree] + clicked, node.path:', node.path); setCreating(true); setExpanded(true) }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    console.log('[FileTree] + clicked, node.path:', node.path)
+                    setCreating(true)
+                    if (!isExpanded) onToggleExpand(node.path)
+                  }}
                   className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                   title="New subfolder"
                 >
@@ -483,7 +534,7 @@ function TreeNodeRow({
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
 
-            <span className="flex-1 truncate text-sm text-gray-700">{node.name}</span>
+            <span className="flex-1 truncate text-sm" style={{ color: 'var(--color-ink)' }}>{node.name}</span>
 
             {(isHovered || menuOpen) && (
               <div className="flex flex-shrink-0 items-center gap-0.5">
@@ -546,7 +597,7 @@ function TreeNodeRow({
       </div>
 
       {/* Children */}
-      {node.isDirectory && expanded && (
+      {node.isDirectory && isExpanded && (
         <div>
           {creating && (
             <div
@@ -572,7 +623,12 @@ function TreeNodeRow({
             </div>
           )}
           {(node.children ?? []).map((child) => (
-            <TreeNodeRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked} />
+            <TreeNodeRow
+              key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked}
+              isExpanded={expandedPaths.has(child.path)}
+              onToggleExpand={onToggleExpand}
+              expandedPaths={expandedPaths}
+            />
           ))}
         </div>
       )}

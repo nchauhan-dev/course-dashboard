@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import FileTree from './FileTree'
 import NewProjectModal from './NewProjectModal'
 import SettingsModal from './SettingsModal'
+import ArchiveModal from './ArchiveModal'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -50,6 +51,7 @@ export default function NewSidebar() {
   // User / footer
   const [userName, setUserName] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
   const [showNewProject, setShowNewProject] = useState(false)
   const [footerMenuOpen, setFooterMenuOpen] = useState(false)
   const [footerMenuPos, setFooterMenuPos] = useState({ bottom: 0, left: 0 })
@@ -61,6 +63,7 @@ export default function NewSidebar() {
 
   // New top-level folder
   const [fileTreeKey, setFileTreeKey] = useState(0)
+  const [refreshKey, setRefreshKey] = useState(0)
   const [creatingTopFolder, setCreatingTopFolder] = useState(false)
   const [newTopFolderName, setNewTopFolderName] = useState('')
 
@@ -176,7 +179,7 @@ export default function NewSidebar() {
     await api.createFolder(`${currentProject.path}/${name}`)
     setCreatingTopFolder(false)
     setNewTopFolderName('')
-    setFileTreeKey((k) => k + 1)
+    setRefreshKey((k) => k + 1)
   }
 
   function openFooterMenu() {
@@ -216,6 +219,7 @@ export default function NewSidebar() {
       if (!sourcePath) continue
       await api.copyFile({ sourcePath, destinationFolder: currentProject.path })
     }
+    setFileTreeKey((k) => k + 1)
   }
 
   // ── Derived display values ────────────────────────────────────────────────────
@@ -347,7 +351,7 @@ export default function NewSidebar() {
                   maxHeight: 240, overflowY: 'auto',
                 }}>
                 {/* Workspace list */}
-                {workspaces.map((ws) => (
+                {workspaces.filter(ws => ws !== '_Archive').map((ws) => (
                   <button
                     key={ws}
                     onClick={() => handleSwitchWorkspace(ws)}
@@ -428,6 +432,25 @@ export default function NewSidebar() {
               {isDashboard ? 'Projects' : 'Files'}
             </span>
             {!isDashboard && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button
+                onClick={() => currentProject && api.openPath(currentProject.path)}
+                title="Open in Finder"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 26, height: 26, borderRadius: 5,
+                  color: 'var(--color-mute)', background: 'transparent', border: 'none', cursor: 'pointer',
+                  transition: 'background-color 120ms ease, transform 120ms ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border)')}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)' }}
+                onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.88)')}
+                onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
               <button
                 onClick={() => { setCreatingTopFolder(true); setNewTopFolderName('') }}
                 title="New folder"
@@ -446,6 +469,7 @@ export default function NewSidebar() {
                   <path d="M12 5v14M5 12h14" />
                 </svg>
               </button>
+              </div>
             )}
           </div>
 
@@ -575,6 +599,7 @@ export default function NewSidebar() {
                     naked
                     exclude={['.git']}
                     onStatsReady={(files, bytes) => setTreeStats({ files, bytes })}
+                    refreshKey={refreshKey}
                   />
                 </>
               ) : null
@@ -634,6 +659,7 @@ export default function NewSidebar() {
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} />}
       <SettingsModal open={settingsOpen} onClose={() => { setSettingsOpen(false); loadUserName() }} />
+      {archiveOpen && <ArchiveModal onClose={() => setArchiveOpen(false)} />}
 
       {/* ── Project context menu ──────────────────────────────────────────────── */}
       {openMenuProject && (() => {
@@ -701,6 +727,21 @@ export default function NewSidebar() {
             boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
           }}
         >
+          <button
+            onClick={() => { setFooterMenuOpen(false); setArchiveOpen(true) }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+              padding: '7px 12px', textAlign: 'left', fontSize: 13,
+              background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-ink2)',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+          >
+            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: 'var(--color-mute)' }}>
+              <path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
+            Archive
+          </button>
           <button
             onClick={() => { setFooterMenuOpen(false); setSettingsOpen(true) }}
             style={{

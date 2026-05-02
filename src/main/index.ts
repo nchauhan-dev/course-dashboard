@@ -1243,3 +1243,13 @@ ipcMain.handle('fs:delete-link', (_e, { projectPath, linkId }: { projectPath: st
     return { success: false, error: String(e) }
   }
 })
+
+ipcMain.handle('fs:rename-link', (_e, { projectPath, linkId, title }: { projectPath: string; linkId: string; title: string }): IpcResult<void> => {
+  try {
+    const links = readLinks(projectPath).map((l) => l.id === linkId ? { ...l, title } : l)
+    writeLinks(projectPath, links)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
