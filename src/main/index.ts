@@ -18,6 +18,7 @@ import type {
   CreateAssignmentParams,
   SubmitFilesParams,
   ProjectLink,
+  LinksFile,
   IpcResult
 } from '../../types/index'
 
@@ -1152,14 +1153,25 @@ function linksPath(projectPath: string): string {
   return path.join(projectPath, 'links.json')
 }
 
-function readLinks(projectPath: string): ProjectLink[] {
+function readLinksFile(projectPath: string): LinksFile {
   const p = linksPath(projectPath)
-  if (!fs.existsSync(p)) return []
-  try { return JSON.parse(fs.readFileSync(p, 'utf-8')) } catch { return [] }
+  if (!fs.existsSync(p)) return { categories: ['Uncategorized'], links: [] }
+  try {
+    const raw = JSON.parse(fs.readFileSync(p, 'utf-8'))
+    let file: LinksFile
+    // Migrate legacy flat array format
+    if (Array.isArray(raw)) {
+      file = { categories: [], links: raw.map(l => ({ ...l, category: l.category ?? 'Uncategorized' })) }
+    } else {
+      file = { categories: raw.categories ?? [], links: (raw.links ?? []).map((l: ProjectLink) => ({ ...l, category: l.category ?? 'Uncategorized' })) }
+    }
+    if (!file.categories.includes('Uncategorized')) file.categories.unshift('Uncategorized')
+    return file
+  } catch { return { categories: ['Uncategorized'], links: [] } }
 }
 
-function writeLinks(projectPath: string, links: ProjectLink[]): void {
-  fs.writeFileSync(linksPath(projectPath), JSON.stringify(links, null, 2), 'utf-8')
+function writeLinksFile(projectPath: string, file: LinksFile): void {
+  fs.writeFileSync(linksPath(projectPath), JSON.stringify(file, null, 2), 'utf-8')
 }
 
 function fetchUrl(url: string): Promise<string> {
@@ -1191,15 +1203,15 @@ function extractMeta(html: string): { title: string; description: string } {
   }
 }
 
-ipcMain.handle('fs:get-links', (_e, projectPath: string): IpcResult<ProjectLink[]> => {
+ipcMain.handle('fs:get-links', (_e, projectPath: string): IpcResult<LinksFile> => {
   try {
-    return { success: true, data: readLinks(projectPath) }
+    return { success: true, data: readLinksFile(projectPath) }
   } catch (e) {
     return { success: false, error: String(e) }
   }
 })
 
-ipcMain.handle('fs:save-link', async (_e, { projectPath, url }: { projectPath: string; url: string }): Promise<IpcResult<ProjectLink>> => {
+ipcMain.handle('fs:save-link', async (_e, { projectPath, url, category }: { projectPath: string; url: string; category?: string }): Promise<IpcResult<ProjectLink>> => {
   try {
     let title = url
     let description = ''
@@ -1223,11 +1235,12 @@ ipcMain.handle('fs:save-link', async (_e, { projectPath, url }: { projectPath: s
       description,
       favicon,
       createdAt: new Date().toISOString(),
+      category: category ?? 'Uncategorized',
     }
 
-    const links = readLinks(projectPath)
-    links.push(newLink)
-    writeLinks(projectPath, links)
+    const file = readLinksFile(projectPath)
+    file.links.push(newLink)
+    writeLinksFile(projectPath, file)
     return { success: true, data: newLink }
   } catch (e) {
     return { success: false, error: String(e) }
@@ -1236,8 +1249,9 @@ ipcMain.handle('fs:save-link', async (_e, { projectPath, url }: { projectPath: s
 
 ipcMain.handle('fs:delete-link', (_e, { projectPath, linkId }: { projectPath: string; linkId: string }): IpcResult<void> => {
   try {
-    const links = readLinks(projectPath).filter((l) => l.id !== linkId)
-    writeLinks(projectPath, links)
+    const file = readLinksFile(projectPath)
+    file.links = file.links.filter((l) => l.id !== linkId)
+    writeLinksFile(projectPath, file)
     return { success: true }
   } catch (e) {
     return { success: false, error: String(e) }
@@ -1246,8 +1260,66 @@ ipcMain.handle('fs:delete-link', (_e, { projectPath, linkId }: { projectPath: st
 
 ipcMain.handle('fs:rename-link', (_e, { projectPath, linkId, title }: { projectPath: string; linkId: string; title: string }): IpcResult<void> => {
   try {
-    const links = readLinks(projectPath).map((l) => l.id === linkId ? { ...l, title } : l)
-    writeLinks(projectPath, links)
+    const file = readLinksFile(projectPath)
+    file.links = file.links.map((l) => l.id === linkId ? { ...l, title } : l)
+    writeLinksFile(projectPath, file)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:move-link', (_e, { projectPath, linkId, category }: { projectPath: string; linkId: string; category: string }): IpcResult<void> => {
+  try {
+    const file = readLinksFile(projectPath)
+    file.links = file.links.map((l) => l.id === linkId ? { ...l, category } : l)
+    writeLinksFile(projectPath, file)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:add-category', (_e, { projectPath, name }: { projectPath: string; name: string }): IpcResult<void> => {
+  try {
+    const file = readLinksFile(projectPath)
+    if (!file.categories.includes(name)) file.categories.push(name)
+    writeLinksFile(projectPath, file)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:delete-category', (_e, { projectPath, name }: { projectPath: string; name: string }): IpcResult<void> => {
+  try {
+    const file = readLinksFile(projectPath)
+    file.categories = file.categories.filter((c) => c !== name)
+    file.links = file.links.map((l) => l.category === name ? { ...l, category: 'Uncategorized' } : l)
+    writeLinksFile(projectPath, file)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:reorder-categories', (_e, { projectPath, categories }: { projectPath: string; categories: string[] }): IpcResult<void> => {
+  try {
+    const file = readLinksFile(projectPath)
+    file.categories = categories
+    writeLinksFile(projectPath, file)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:rename-category', (_e, { projectPath, oldName, newName }: { projectPath: string; oldName: string; newName: string }): IpcResult<void> => {
+  try {
+    const file = readLinksFile(projectPath)
+    file.categories = file.categories.map((c) => c === oldName ? newName : c)
+    file.links = file.links.map((l) => l.category === oldName ? { ...l, category: newName } : l)
+    writeLinksFile(projectPath, file)
     return { success: true }
   } catch (e) {
     return { success: false, error: String(e) }

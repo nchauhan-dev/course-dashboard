@@ -51,8 +51,13 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('fs:delete-permanent', params),
 
   getLinks: (projectPath: string) => ipcRenderer.invoke('fs:get-links', projectPath),
-  saveLink: (projectPath: string, url: string) => ipcRenderer.invoke('fs:save-link', { projectPath, url }),
+  saveLink: (projectPath: string, url: string, category?: string) => ipcRenderer.invoke('fs:save-link', { projectPath, url, category }),
   deleteLink: (projectPath: string, linkId: string) => ipcRenderer.invoke('fs:delete-link', { projectPath, linkId }),
   saveRename: (projectPath: string, linkId: string, title: string) => ipcRenderer.invoke('fs:rename-link', { projectPath, linkId, title }),
+  addCategory: (projectPath: string, name: string) => ipcRenderer.invoke('fs:add-category', { projectPath, name }),
+  deleteCategory: (projectPath: string, name: string) => ipcRenderer.invoke('fs:delete-category', { projectPath, name }),
+  reorderCategories: (projectPath: string, categories: string[]) => ipcRenderer.invoke('fs:reorder-categories', { projectPath, categories }),
+  renameCategory: (projectPath: string, oldName: string, newName: string) => ipcRenderer.invoke('fs:rename-category', { projectPath, oldName, newName }),
+  moveLink: (projectPath: string, linkId: string, category: string) => ipcRenderer.invoke('fs:move-link', { projectPath, linkId, category }),
   openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url)
 })

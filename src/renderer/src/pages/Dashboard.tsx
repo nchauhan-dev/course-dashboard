@@ -86,17 +86,18 @@ export default function Dashboard() {
 
   // Swipe to reveal stat strip + projects
   const isTransitioning = useRef(false)
+  const isTransitioningUp = useRef(false)
+  const projectsScrollRef = useRef<HTMLDivElement>(null)
 
   function handleWheel(e: React.WheelEvent) {
-    if (isTransitioning.current) return
-    if (e.deltaY > 30 && dashboardPage === 0) {
+    if (e.deltaY > 30 && dashboardPage === 0 && !isTransitioning.current) {
       isTransitioning.current = true
       setDashboardPage(1)
       setTimeout(() => { isTransitioning.current = false }, 800)
-    } else if (e.deltaY < -30 && dashboardPage === 1) {
-      isTransitioning.current = true
+    } else if (e.deltaY < -30 && dashboardPage === 1 && projectsScrollRef.current?.scrollTop === 0 && !isTransitioningUp.current) {
+      isTransitioningUp.current = true
       setDashboardPage(0)
-      setTimeout(() => { isTransitioning.current = false }, 800)
+      setTimeout(() => { isTransitioningUp.current = false }, 1500)
     }
   }
 
@@ -111,7 +112,7 @@ export default function Dashboard() {
         {/* Content container */}
         <div
           className="flex-1"
-          style={{ overflow: 'hidden', minHeight: '100%' }}
+          style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}
         >
 
           {/* Stat strip — fades in on swipe down */}
@@ -174,6 +175,16 @@ export default function Dashboard() {
           </div>
 
           {/* Projects — fades in on swipe down */}
+          <div
+            ref={projectsScrollRef}
+            className="no-scrollbar"
+            style={{
+              flex: 1, overflowY: 'auto', minHeight: 0,
+              pointerEvents: dashboardPage === 0 ? 'none' : 'auto',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+            } as React.CSSProperties}
+          >
           <div style={{
             padding: '28px 30px',
             opacity: dashboardPage === 1 ? 1 : 0,
@@ -217,6 +228,7 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+          </div>{/* end scrollable projects wrapper */}
 
         </div>
       </main>

@@ -7,7 +7,7 @@ import CalendarPanel from '../components/CalendarPanel'
 import FileTree from '../components/FileTree'
 import Header from '../components/Header'
 import { USE_NEW_SIDEBAR } from '../App'
-import type { Assignment, ProjectLink } from '../../../../types/index'
+import type { Assignment, LinksFile, ProjectLink } from '../../../../types/index'
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -59,7 +59,7 @@ export default function ProjectDetail() {
   const [projectCreatedAt, setProjectCreatedAt] = useState<string | null>(null)
 
   // Resource Hub
-  const [links, setLinks] = useState<ProjectLink[] | null>(null)
+  const [links, setLinks] = useState<LinksFile | null>(null)
   const [isAddingLink, setIsAddingLink] = useState(false)
   const [newLinkUrl, setNewLinkUrl] = useState('')
   const [isSavingLink, setIsSavingLink] = useState(false)
@@ -71,6 +71,14 @@ export default function ProjectDetail() {
   const [linkSort, setLinkSort] = useState<'date_desc' | 'date_asc' | 'alpha_asc' | 'alpha_desc'>('date_desc')
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const sortBtnRef = useRef<HTMLButtonElement>(null)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [isAddingCategory, setIsAddingCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [moveSubmenuOpen, setMoveSubmenuOpen] = useState(false)
+  const [categoryMenu, setCategoryMenu] = useState<{ name: string; x: number; y: number } | null>(null)
+  const [renamingCategory, setRenamingCategory] = useState<string | null>(null)
+  const [renameCategoryValue, setRenameCategoryValue] = useState('')
+  const [deletingCategory, setDeletingCategory] = useState<string | null>(null)
 
   // Assignment modal
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null)
@@ -108,7 +116,7 @@ export default function ProjectDetail() {
     })
     api.getLinks(project.path).then((res) => {
       if (res.success && res.data) setLinks(res.data)
-      else setLinks([])
+      else setLinks({ categories: [], links: [] })
     })
   }, [project?.path]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -212,10 +220,53 @@ export default function ProjectDetail() {
     }
   }
 
+  async function handleRenameCategory(oldName: string, newName: string) {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName || !project) { setRenamingCategory(null); setRenameCategoryValue(''); return }
+    await api.renameCategory(project.path, oldName, trimmed)
+    const res = await api.getLinks(project.path)
+    if (res.success && res.data) setLinks(res.data)
+    setRenamingCategory(null)
+    setRenameCategoryValue('')
+  }
+
+  async function handleMoveCategory(name: string, direction: 'up' | 'down') {
+    if (!project) return
+    const cats = [...(links?.categories ?? [])]
+    const idx = cats.indexOf(name)
+    if (idx === -1) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= cats.length) return
+    ;[cats[idx], cats[swapIdx]] = [cats[swapIdx], cats[idx]]
+    await api.reorderCategories(project.path, cats)
+    const res = await api.getLinks(project.path)
+    if (res.success && res.data) setLinks(res.data)
+  }
+
+  async function handleMoveLink(linkId: string, category: string) {
+    if (!project) return
+    await api.moveLink(project.path, linkId, category)
+    const res = await api.getLinks(project.path)
+    if (res.success && res.data) setLinks(res.data)
+    setOpenLinkMenu(null)
+    setMoveSubmenuOpen(false)
+  }
+
+  async function handleAddCategory(e: React.FormEvent) {
+    e.preventDefault()
+    const name = newCategoryName.trim()
+    if (!name || !project) return
+    await api.addCategory(project.path, name)
+    const res = await api.getLinks(project.path)
+    if (res.success && res.data) setLinks(res.data)
+    setIsAddingCategory(false)
+    setNewCategoryName('')
+  }
+
   // Close link context menu on outside click
   useEffect(() => {
     if (!openLinkMenu) return
-    const handler = () => setOpenLinkMenu(null)
+    const handler = () => { setOpenLinkMenu(null); setMoveSubmenuOpen(false) }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [openLinkMenu])
@@ -227,6 +278,22 @@ export default function ProjectDetail() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [sortMenuOpen])
+
+  // Close category three-dot menu on outside click
+  useEffect(() => {
+    if (!categoryMenu) return
+    const handler = () => setCategoryMenu(null)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [categoryMenu])
+
+  // Cancel add-category on outside click
+  useEffect(() => {
+    if (!isAddingCategory) return
+    const handler = () => { setIsAddingCategory(false); setNewCategoryName('') }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [isAddingCategory])
 
   if (!project) {
     return (
@@ -378,11 +445,26 @@ export default function ProjectDetail() {
       {/* ── Main: Assignments ─────────────────────────────────────────────────── */}
       <main className="flex flex-1 flex-col overflow-hidden">
 
-        {/* Color accent strip */}
-        <div style={{ height: 3, background: project.color, flexShrink: 0 }} />
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto" style={{ padding: '24px 28px' }}>
+        <div
+          className="flex-1 overflow-y-auto"
+          style={{ padding: '24px 28px' }}
+          onDragOver={(e) => { e.preventDefault(); setIsLinkDragOver(true) }}
+          onDragEnter={(e) => { e.preventDefault(); setIsLinkDragOver(true) }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsLinkDragOver(false) }}
+          onDrop={async (e) => {
+            e.preventDefault()
+            setIsLinkDragOver(false)
+            const url = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')).trim()
+            if (!url || !url.startsWith('http') || !project) return
+            setIsSavingLink(true)
+            await api.saveLink(project.path, url)
+            const res = await api.getLinks(project.path)
+            if (res.success && res.data) setLinks(res.data)
+            setIsSavingLink(false)
+          }}
+        >
           {/* Project title block */}
           <div className="mb-6 flex items-start justify-between gap-4">
             <div>
@@ -467,21 +549,8 @@ export default function ProjectDetail() {
               border: isLinkDragOver ? '1px dashed var(--color-border)' : '1px dashed transparent',
               transition: 'background 120ms ease, border-color 120ms ease, padding 120ms ease',
             }}
-            onDragOver={(e) => { e.preventDefault(); setIsLinkDragOver(true) }}
-            onDragEnter={(e) => { e.preventDefault(); setIsLinkDragOver(true) }}
-            onDragLeave={() => setIsLinkDragOver(false)}
-            onDrop={async (e) => {
-              e.preventDefault()
-              setIsLinkDragOver(false)
-              const url = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')).trim()
-              if (!url || !url.startsWith('http') || !project) return
-              setIsSavingLink(true)
-              await api.saveLink(project.path, url)
-              const res = await api.getLinks(project.path)
-              if (res.success && res.data) setLinks(res.data)
-              setIsSavingLink(false)
-            }}
           >
+            {/* Header row */}
             <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
               <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-mute)' }}>
                 Resource Hub
@@ -513,7 +582,6 @@ export default function ProjectDetail() {
                     width: 22, height: 22, borderRadius: 6, border: '1px solid var(--color-border)',
                     background: 'transparent', color: 'var(--color-mute)', display: 'flex',
                     alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
-                    fontSize: 16, lineHeight: 1,
                   }}
                 >
                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
@@ -523,6 +591,7 @@ export default function ProjectDetail() {
               </div>
             </div>
 
+            {/* Add link input row */}
             {isAddingLink && (
               <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
                 <input
@@ -533,11 +602,7 @@ export default function ProjectDetail() {
                   placeholder="Paste a URL and press Enter..."
                   disabled={isSavingLink}
                   onKeyDown={async (e) => {
-                    if (e.key === 'Escape') {
-                      setIsAddingLink(false)
-                      setNewLinkUrl('')
-                      return
-                    }
+                    if (e.key === 'Escape') { setIsAddingLink(false); setNewLinkUrl(''); return }
                     if (e.key === 'Enter') {
                       const url = newLinkUrl.trim()
                       if (!url || !project) return
@@ -561,7 +626,6 @@ export default function ProjectDetail() {
                 )}
               </div>
             )}
-
             {isSavingLink && !isAddingLink && (
               <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
@@ -572,138 +636,358 @@ export default function ProjectDetail() {
               </div>
             )}
 
-            {links !== null && links.length === 0 && !isAddingLink ? (
+            {/* Grouped link display */}
+            {links !== null && links.links.length === 0 && !isAddingLink ? (
               <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: 'var(--color-mute)' }}>
                 Drop a link or click + to add
               </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-                {[...(links ?? [])].sort((a, b) => {
-                  if (linkSort === 'alpha_asc') return (a.title || a.url).localeCompare(b.title || b.url)
-                  if (linkSort === 'alpha_desc') return (b.title || b.url).localeCompare(a.title || a.url)
-                  if (linkSort === 'date_asc') return a.createdAt.localeCompare(b.createdAt)
-                  return b.createdAt.localeCompare(a.createdAt)
-                }).map((link) => {
-                  let domain = ''
-                  try { domain = new URL(link.url).hostname.replace(/^www\./, '') } catch { /* ignore */ }
+            ) : (() => {
+              // Sort all links
+              const sortedLinks = [...(links?.links ?? [])].sort((a, b) => {
+                if (linkSort === 'alpha_asc') return (a.title || a.url).localeCompare(b.title || b.url)
+                if (linkSort === 'alpha_desc') return (b.title || b.url).localeCompare(a.title || a.url)
+                if (linkSort === 'date_asc') return a.createdAt.localeCompare(b.createdAt)
+                return b.createdAt.localeCompare(a.createdAt)
+              })
 
-                  // Clean title: strip path separators, take last meaningful segment
-                  const rawTitle = link.title || link.url
-                  const cleanTitle = rawTitle.includes('\\') || rawTitle.includes('/')
-                    ? rawTitle.split(/[\\\/]/).map(s => s.trim()).filter(Boolean).pop() ?? rawTitle
-                    : rawTitle
+              // Build ordered group names from links.categories (Uncategorized included)
+              const allCats = links?.categories ?? ['Uncategorized']
+              // Pick up any stray categories not yet in the list
+              const extraCats = [...new Set(
+                sortedLinks.map(l => l.category || 'Uncategorized').filter(c => !allCats.includes(c))
+              )]
+              const allGroupNames = [...allCats, ...extraCats]
+              const groups = allGroupNames
+                .map(cat => ({ name: cat, links: sortedLinks.filter(l => (l.category || 'Uncategorized') === cat) }))
 
-                  // Seeded gradient from domain name
-                  function domainColor(seed: string, offset: number): string {
-                    let h = 0
-                    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-                    return `hsl(${(h + offset) % 360}, 45%, 55%)`
-                  }
-                  const c1 = domainColor(domain, 0)
-                  const c2 = domainColor(domain, 60)
-
-                  return (
-                    <div
-                      key={link.id}
-                      onClick={(e) => setOpenLinkMenu({ linkId: link.id, x: e.clientX, y: e.clientY })}
-                      style={{
-                        background: 'var(--color-panel)',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: 10,
-                        overflow: 'hidden',
-                        cursor: 'pointer',
-                        display: 'flex', flexDirection: 'row', alignItems: 'center',
-                        gap: 10, padding: '8px 10px',
-                      }}
-                    >
-                      {/* Icon square */}
-                      <div style={{
-                        width: 40, height: 40, flexShrink: 0,
-                        borderRadius: 8,
-                        background: `linear-gradient(135deg, ${c1}, ${c2})`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {link.favicon ? (
-                          <img
-                            src={link.favicon}
-                            alt=""
-                            width={20}
-                            height={20}
-                            style={{ borderRadius: 3 }}
-                            onError={(e) => {
-                              const el = e.currentTarget
-                              el.style.display = 'none'
-                              const letter = el.parentElement?.querySelector('.link-letter') as HTMLElement | null
-                              if (letter) letter.style.display = 'flex'
-                            }}
-                          />
-                        ) : null}
-                        <div
-                          className="link-letter"
-                          style={{
-                            display: link.favicon ? 'none' : 'flex',
-                            alignItems: 'center', justifyContent: 'center',
-                            fontSize: 15, fontWeight: 600, color: '#fff',
-                            textTransform: 'uppercase',
+              // Shared link-card renderer
+              function domainColor(seed: string, offset: number): string {
+                let h = 0
+                for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+                return `hsl(${(h + offset) % 360}, 45%, 55%)`
+              }
+              function renderLinkCard(link: ProjectLink) {
+                let domain = ''
+                try { domain = new URL(link.url).hostname.replace(/^www\./, '') } catch { /* ignore */ }
+                const rawTitle = link.title || link.url
+                const cleanTitle = rawTitle.includes('\\') || rawTitle.includes('/')
+                  ? rawTitle.split(/[\\\/]/).map((s: string) => s.trim()).filter(Boolean).pop() ?? rawTitle
+                  : rawTitle
+                const c1 = domainColor(domain, 0)
+                const c2 = domainColor(domain, 60)
+                return (
+                  <div
+                    key={link.id}
+                    onClick={(e) => { setMoveSubmenuOpen(false); setOpenLinkMenu({ linkId: link.id, x: e.clientX, y: e.clientY }) }}
+                    style={{
+                      background: 'var(--color-panel)', border: '1px solid var(--color-border)',
+                      borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
+                      display: 'flex', flexDirection: 'row', alignItems: 'center',
+                      gap: 10, padding: '8px 10px',
+                    }}
+                  >
+                    {/* Icon */}
+                    <div style={{
+                      width: 40, height: 40, flexShrink: 0, borderRadius: 8,
+                      background: `linear-gradient(135deg, ${c1}, ${c2})`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {link.favicon ? (
+                        <img
+                          src={link.favicon}
+                          alt=""
+                          width={20}
+                          height={20}
+                          style={{ borderRadius: 3 }}
+                          onError={(e) => {
+                            const el = e.currentTarget
+                            el.style.display = 'none'
+                            const letter = el.parentElement?.querySelector('.link-letter') as HTMLElement | null
+                            if (letter) letter.style.display = 'flex'
                           }}
-                        >
-                          {domain.charAt(0) || '?'}
-                        </div>
-                      </div>
-                      {/* Text */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
-                        {renamingLinkId === link.id ? (
-                          <input
-                            autoFocus
-                            value={renameLinkValue}
-                            onChange={e => setRenameLinkValue(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() }
-                              if (e.key === 'Escape') { setRenamingLinkId(null); setRenameLinkValue('') }
-                            }}
-                            onBlur={() => saveLinkRename(link.id, renameLinkValue)}
-                            onClick={e => e.stopPropagation()}
-                            className="sidebar-input"
-                            style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-ink)', width: '100%', padding: 0 }}
-                          />
-                        ) : (
-                          <div style={{
-                            fontSize: 12, fontWeight: 500, color: 'var(--color-ink)',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>
-                            {cleanTitle}
-                          </div>
-                        )}
-                        <div style={{
-                          fontSize: 11, color: 'var(--color-mute)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {domain}
-                        </div>
+                        />
+                      ) : null}
+                      <div
+                        className="link-letter"
+                        style={{
+                          display: link.favicon ? 'none' : 'flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          fontSize: 15, fontWeight: 600, color: '#fff', textTransform: 'uppercase',
+                        }}
+                      >
+                        {domain.charAt(0) || '?'}
                       </div>
                     </div>
-                  )
-                })}
-              </div>
-            )}
+                    {/* Text */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                      {renamingLinkId === link.id ? (
+                        <input
+                          autoFocus
+                          value={renameLinkValue}
+                          onChange={e => setRenameLinkValue(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() }
+                            if (e.key === 'Escape') { setRenamingLinkId(null); setRenameLinkValue('') }
+                          }}
+                          onBlur={() => saveLinkRename(link.id, renameLinkValue)}
+                          onClick={e => e.stopPropagation()}
+                          className="sidebar-input"
+                          style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-ink)', width: '100%', padding: 0 }}
+                        />
+                      ) : (
+                        <div style={{
+                          fontSize: 12, fontWeight: 500, color: 'var(--color-ink)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {cleanTitle}
+                        </div>
+                      )}
+                      <div style={{
+                        fontSize: 11, color: 'var(--color-mute)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {domain}
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {groups.map((group) => {
+                    const isCollapsed = collapsedGroups.has(group.name)
+                    const isUncategorized = group.name === 'Uncategorized'
+                    const allCatsOrdered = links?.categories ?? []
+                    const catIdx = allCatsOrdered.indexOf(group.name)
+                    const isFirst = catIdx === 0
+                    const isLast = catIdx === allCatsOrdered.length - 1
+                    const arrowBtnStyle = (disabled: boolean): React.CSSProperties => ({
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 18, height: 18, borderRadius: 4,
+                      border: 'none', background: 'transparent', padding: 0,
+                      color: disabled ? 'var(--color-border)' : 'var(--color-mute)',
+                      cursor: disabled ? 'default' : 'pointer',
+                      flexShrink: 0,
+                      transition: 'color 100ms ease',
+                    })
+                    return (
+                      <div key={group.name}>
+                        {/* Group header — delete confirmation replaces it entirely */}
+                        {deletingCategory === group.name ? (
+                          <div
+                            className="flex items-center gap-2"
+                            style={{ marginBottom: 8, userSelect: 'none' }}
+                          >
+                            <span style={{ fontSize: 11, color: 'var(--color-ink2)' }}>
+                              Move links to Uncategorized and delete?
+                            </span>
+                            <button
+                              style={{
+                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 5,
+                                background: 'var(--color-danger)', color: '#fff',
+                                border: 'none', cursor: 'pointer',
+                              }}
+                              onClick={async () => {
+                                if (!project) return
+                                await api.deleteCategory(project.path, group.name)
+                                const res = await api.getLinks(project.path)
+                                if (res.success && res.data) setLinks(res.data)
+                                setDeletingCategory(null)
+                              }}
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              style={{
+                                fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 5,
+                                background: 'var(--color-border)', color: 'var(--color-ink)',
+                                border: 'none', cursor: 'pointer',
+                              }}
+                              onClick={() => setDeletingCategory(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            className="flex items-center gap-2"
+                            style={{ marginBottom: 8, cursor: 'pointer', userSelect: 'none' }}
+                            onClick={() => setCollapsedGroups(prev => {
+                              const next = new Set(prev)
+                              if (next.has(group.name)) next.delete(group.name)
+                              else next.add(group.name)
+                              return next
+                            })}
+                          >
+                            <svg
+                              width="10" height="10" viewBox="0 0 10 10"
+                              fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
+                              style={{
+                                color: 'var(--color-mute)', flexShrink: 0,
+                                transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                                transition: 'transform 120ms ease',
+                              }}
+                            >
+                              <path d="M2 3.5 5 6.5 8 3.5" />
+                            </svg>
+                            {/* Name — inline rename input when editing */}
+                            {renamingCategory === group.name ? (
+                              <input
+                                autoFocus
+                                value={renameCategoryValue}
+                                onChange={e => setRenameCategoryValue(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); handleRenameCategory(group.name, renameCategoryValue) }
+                                  if (e.key === 'Escape') { setRenamingCategory(null); setRenameCategoryValue('') }
+                                }}
+                                onClick={e => e.stopPropagation()}
+                                className="sidebar-input"
+                                style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ink2)', letterSpacing: '0.02em', padding: 0, width: 120 }}
+                              />
+                            ) : (
+                              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-ink2)', letterSpacing: '0.02em' }}>
+                                {group.name}
+                              </span>
+                            )}
+                            <span style={{ fontSize: 10.5, color: 'var(--color-mute)' }}>
+                              {group.links.length}
+                            </span>
+                            {/* Right-side controls */}
+                            <div
+                              className="flex items-center"
+                              style={{ marginLeft: 'auto', gap: 2 }}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              {/* Three-dot menu — non-Uncategorized only */}
+                              {!isUncategorized && (
+                                <button
+                                  style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 18, height: 18, borderRadius: 4,
+                                    border: 'none', background: 'transparent', padding: 0,
+                                    color: 'var(--color-mute)', cursor: 'pointer', flexShrink: 0,
+                                    transition: 'color 100ms ease',
+                                  }}
+                                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-ink)')}
+                                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-mute)')}
+                                  onClick={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect()
+                                    setCategoryMenu({ name: group.name, x: rect.left, y: rect.bottom + 4 })
+                                  }}
+                                  title="Category options"
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                                    <circle cx="2" cy="8" r="1.5" />
+                                    <circle cx="8" cy="8" r="1.5" />
+                                    <circle cx="14" cy="8" r="1.5" />
+                                  </svg>
+                                </button>
+                              )}
+                              {/* Reorder arrows */}
+                              <button
+                                style={arrowBtnStyle(isFirst)}
+                                disabled={isFirst}
+                                onMouseEnter={e => { if (!isFirst) (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+                                onMouseLeave={e => { if (!isFirst) (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+                                onClick={() => handleMoveCategory(group.name, 'up')}
+                                title="Move up"
+                              >
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                                  <path d="M2 6.5 5 3.5 8 6.5" />
+                                </svg>
+                              </button>
+                              <button
+                                style={arrowBtnStyle(isLast)}
+                                disabled={isLast}
+                                onMouseEnter={e => { if (!isLast) (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+                                onMouseLeave={e => { if (!isLast) (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+                                onClick={() => handleMoveCategory(group.name, 'down')}
+                                title="Move down"
+                              >
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                                  <path d="M2 3.5 5 6.5 8 3.5" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {/* Cards grid */}
+                        {!isCollapsed && (
+                          group.links.length === 0
+                            ? <div style={{ fontSize: 11.5, color: 'var(--color-mute)', padding: '2px 0 4px' }}>No links yet</div>
+                            : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+                                {group.links.map(link => renderLinkCard(link))}
+                              </div>
+                        )}
+                      </div>
+                    )
+                  })}
+
+                  {/* Add Category */}
+                  <div>
+                    {isAddingCategory ? (
+                      <div onMouseDown={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                          autoFocus
+                          value={newCategoryName}
+                          onChange={e => setNewCategoryName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleAddCategory(e as any)
+                            }
+                            if (e.key === 'Escape') {
+                              setIsAddingCategory(false)
+                              setNewCategoryName('')
+                            }
+                          }}
+                          placeholder="Category name…"
+                          className="sidebar-input flex-1 min-w-0"
+                          style={{ fontSize: 12 }}
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setIsAddingCategory(true)}
+                        style={{
+                          fontSize: 11.5, color: 'var(--color-mute)', background: 'none',
+                          border: 'none', cursor: 'pointer', padding: 0,
+                          display: 'flex', alignItems: 'center', gap: 4, transition: 'color 100ms ease',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-ink)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-mute)')}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                          <path d="M6 1v10M1 6h10" />
+                        </svg>
+                        Add Category
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
         </div>
       </main>
 
       {/* Link context menu portal */}
       {openLinkMenu && (() => {
-        const menuLink = (links ?? []).find(l => l.id === openLinkMenu.linkId)
+        const menuLink = (links?.links ?? []).find(l => l.id === openLinkMenu.linkId)
         if (!menuLink) return null
         const rowStyle: React.CSSProperties = {
           padding: '8px 12px', cursor: 'pointer', fontSize: 13,
           color: 'var(--color-ink)', transition: 'background 80ms ease',
         }
+        // All categories the link could be moved to (exclude current)
+        const moveTargets = ['Uncategorized', ...(links?.categories ?? [])].filter(c => c !== (menuLink.category || 'Uncategorized'))
         return createPortal(
           <div
             onMouseDown={(e) => e.stopPropagation()}
             style={{
               position: 'fixed', top: openLinkMenu.y, left: openLinkMenu.x,
-              zIndex: 9999, width: 160,
+              zIndex: 9999, width: 168,
               background: 'var(--color-panel)', border: '1px solid var(--color-border)',
               borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
               overflow: 'hidden',
@@ -721,7 +1005,7 @@ export default function ProjectDetail() {
               style={rowStyle}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              onClick={() => { console.log('openExternal url:', menuLink.url); api.openExternal(menuLink.url).then(res => console.log('openExternal result:', res)); setOpenLinkMenu(null) }}
+              onClick={() => { api.openExternal(menuLink.url); setOpenLinkMenu(null) }}
             >
               Open in Browser
             </div>
@@ -733,6 +1017,42 @@ export default function ProjectDetail() {
             >
               Copy URL
             </div>
+            {/* Move to... */}
+            {moveTargets.length > 0 && (
+              <>
+                <div
+                  style={{ ...rowStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  onClick={() => setMoveSubmenuOpen(o => !o)}
+                >
+                  <span>Move to…</span>
+                  <svg
+                    width="10" height="10" viewBox="0 0 10 10"
+                    fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
+                    style={{ color: 'var(--color-mute)', transform: moveSubmenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }}
+                  >
+                    <path d="M2 3.5 5 6.5 8 3.5" />
+                  </svg>
+                </div>
+                {moveSubmenuOpen && (
+                  <div style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-panel2)' }}>
+                    {moveTargets.map(cat => (
+                      <div
+                        key={cat}
+                        style={{ ...rowStyle, paddingLeft: 20, fontSize: 12 }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        onClick={() => handleMoveLink(menuLink.id, cat)}
+                      >
+                        {cat}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            <div style={{ height: 1, background: 'var(--color-border)' }} />
             <div
               style={{ ...rowStyle, color: 'var(--color-danger)' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
@@ -800,6 +1120,51 @@ export default function ProjectDetail() {
                 )}
               </div>
             ))}
+          </div>,
+          document.body
+        )
+      })()}
+
+      {/* Category three-dot menu portal */}
+      {categoryMenu && (() => {
+        const rowStyle: React.CSSProperties = {
+          padding: '8px 12px', cursor: 'pointer', fontSize: 13,
+          color: 'var(--color-ink)', transition: 'background 80ms ease',
+        }
+        return createPortal(
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed', top: categoryMenu.y, left: categoryMenu.x,
+              zIndex: 9999, width: 140,
+              background: 'var(--color-panel)', border: '1px solid var(--color-border)',
+              borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={rowStyle}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => {
+                setRenamingCategory(categoryMenu.name)
+                setRenameCategoryValue(categoryMenu.name)
+                setCategoryMenu(null)
+              }}
+            >
+              Rename
+            </div>
+            <div
+              style={{ ...rowStyle, color: 'var(--color-danger)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => {
+                setDeletingCategory(categoryMenu.name)
+                setCategoryMenu(null)
+              }}
+            >
+              Delete
+            </div>
           </div>,
           document.body
         )

@@ -9,7 +9,8 @@ import type {
   CreateAssignmentParams,
   SubmitFilesParams,
   IpcResult,
-  ProjectLink
+  ProjectLink,
+  LinksFile
 } from '../../../types/index'
 
 declare global {
@@ -62,10 +63,15 @@ declare global {
       restoreArchiveItem: (params: { itemPath: string; rootPath: string }) => Promise<IpcResult<void>>
       deletePermanent: (params: { itemPath: string }) => Promise<IpcResult<void>>
 
-      getLinks: (projectPath: string) => Promise<IpcResult<ProjectLink[]>>
-      saveLink: (projectPath: string, url: string) => Promise<IpcResult<ProjectLink>>
+      getLinks: (projectPath: string) => Promise<IpcResult<LinksFile>>
+      saveLink: (projectPath: string, url: string, category?: string) => Promise<IpcResult<ProjectLink>>
       deleteLink: (projectPath: string, linkId: string) => Promise<IpcResult<void>>
       saveRename: (projectPath: string, linkId: string, title: string) => Promise<IpcResult<void>>
+      addCategory: (projectPath: string, name: string) => Promise<IpcResult<void>>
+      deleteCategory: (projectPath: string, name: string) => Promise<IpcResult<void>>
+      reorderCategories: (projectPath: string, categories: string[]) => Promise<IpcResult<void>>
+      renameCategory: (projectPath: string, oldName: string, newName: string) => Promise<IpcResult<void>>
+      moveLink: (projectPath: string, linkId: string, category: string) => Promise<IpcResult<void>>
       openExternal: (url: string) => Promise<void>
     }
   }
@@ -115,9 +121,14 @@ export const api = {
   restoreArchiveItem: (params: { itemPath: string; rootPath: string }) => window.api.restoreArchiveItem(params),
   deletePermanent: (params: { itemPath: string }) => window.api.deletePermanent(params),
 
-  getLinks: (projectPath: string): Promise<IpcResult<ProjectLink[]>> => window.api.getLinks(projectPath),
-  saveLink: (projectPath: string, url: string): Promise<IpcResult<ProjectLink>> => window.api.saveLink(projectPath, url),
+  getLinks: (projectPath: string): Promise<IpcResult<LinksFile>> => window.api.getLinks(projectPath),
+  saveLink: (projectPath: string, url: string, category?: string): Promise<IpcResult<ProjectLink>> => window.api.saveLink(projectPath, url, category),
   deleteLink: (projectPath: string, linkId: string): Promise<IpcResult<void>> => window.api.deleteLink(projectPath, linkId),
   saveRename: (projectPath: string, linkId: string, title: string): Promise<IpcResult<void>> => window.api.saveRename(projectPath, linkId, title),
+  addCategory: (projectPath: string, name: string): Promise<IpcResult<void>> => window.api.addCategory(projectPath, name),
+  deleteCategory: (projectPath: string, name: string): Promise<IpcResult<void>> => window.api.deleteCategory(projectPath, name),
+  reorderCategories: (projectPath: string, categories: string[]): Promise<IpcResult<void>> => window.api.reorderCategories(projectPath, categories),
+  renameCategory: (projectPath: string, oldName: string, newName: string): Promise<IpcResult<void>> => window.api.renameCategory(projectPath, oldName, newName),
+  moveLink: (projectPath: string, linkId: string, category: string): Promise<IpcResult<void>> => window.api.moveLink(projectPath, linkId, category),
   openExternal: (url: string): Promise<void> => window.api.openExternal(url)
 }

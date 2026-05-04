@@ -103,4 +103,10 @@ export interface ProjectLink {
   description: string
   favicon: string
   createdAt: string
+  category: string
+}
+
+export interface LinksFile {
+  categories: string[]
+  links: ProjectLink[]
 }
