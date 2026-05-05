@@ -1,11 +1,15 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '../store/AppContext'
+import { api } from '../lib/api'
 import ProjectCard from '../components/ProjectCard'
 import CalendarPanel from '../components/CalendarPanel'
 import NewProjectModal from '../components/NewProjectModal'
 import Header from '../components/Header'
 import greetingsData from '../data/greetings.json'
 import quotesData from '../data/quotes_repository.json'
+import type { ColorGroup } from '../../../../types/index'
 
 // Stat helpers — local time so date boundaries match the user's clock
 function localDate(d: Date): string {
@@ -39,8 +43,15 @@ const chevBtn: React.CSSProperties = {
 }
 
 export default function Dashboard() {
-  const { projects, calendarEvents, userName, openAssignmentModal, dashboardPage, setDashboardPage } = useApp()
+  const { projects, calendarEvents, userName, openAssignmentModal, dashboardPage, setDashboardPage, rootPath, activeWorkspace } = useApp()
   const [showNewProject, setShowNewProject] = useState(false)
+
+  // Color groups
+  const [colorGroups, setColorGroups] = useState<ColorGroup[]>([])
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [groupMenu, setGroupMenu] = useState<{ color: string; x: number; y: number } | null>(null)
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
+  const [renameGroupValue, setRenameGroupValue] = useState('')
 
   // Lifted calendar nav state
   const today = new Date()
@@ -99,6 +110,59 @@ export default function Dashboard() {
       setDashboardPage(0)
       setTimeout(() => { isTransitioningUp.current = false }, 1500)
     }
+  }
+
+  // Sync color groups with current project colors
+  useEffect(() => {
+    if (!rootPath || !activeWorkspace) return
+    api.getColorGroups(rootPath, activeWorkspace).then((res) => {
+      const loaded: ColorGroup[] = res.success && res.data ? res.data : []
+      const projectColors = [...new Set(projects.map((p) => p.color))]
+      let updated = [...loaded]
+      let changed = false
+      for (const color of projectColors) {
+        if (!updated.find((g) => g.color === color)) {
+          updated.push({ color, name: `Group ${updated.length + 1}`, order: updated.length })
+          changed = true
+        }
+      }
+      const before = updated.length
+      updated = updated.filter((g) => projectColors.includes(g.color))
+      if (updated.length !== before) changed = true
+      updated = updated.map((g, i) => ({ ...g, order: i }))
+      setColorGroups(updated)
+      if (changed) api.saveColorGroups(rootPath, activeWorkspace, updated)
+    })
+  }, [rootPath, activeWorkspace, projects]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close group menu on outside click
+  useEffect(() => {
+    if (!groupMenu) return
+    const handler = () => setGroupMenu(null)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [groupMenu])
+
+  async function handleRenameGroup(color: string, name: string) {
+    const trimmed = name.trim()
+    if (!trimmed || !rootPath) { setRenamingGroup(null); setRenameGroupValue(''); return }
+    await api.renameColorGroup(rootPath, activeWorkspace, color, trimmed)
+    setColorGroups((prev) => prev.map((g) => g.color === color ? { ...g, name: trimmed } : g))
+    setRenamingGroup(null)
+    setRenameGroupValue('')
+  }
+
+  async function handleReorderGroup(color: string, direction: 'up' | 'down') {
+    if (!rootPath) return
+    const sorted = [...colorGroups].sort((a, b) => a.order - b.order)
+    const idx = sorted.findIndex((g) => g.color === color)
+    if (idx === -1) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= sorted.length) return
+    ;[sorted[idx], sorted[swapIdx]] = [sorted[swapIdx], sorted[idx]]
+    const reordered = sorted.map((g, i) => ({ ...g, order: i }))
+    setColorGroups(reordered)
+    await api.reorderColorGroups(rootPath, activeWorkspace, reordered)
   }
 
   return (
@@ -213,18 +277,151 @@ export default function Dashboard() {
                 </button>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-                {projects.map((project, index) => (
-                  <div
-                    key={project.id}
-                    style={{
-                      animation: 'sidebar-fade-in 200ms ease both',
-                      animationDelay: `${index * 60}ms`,
-                    }}
-                  >
-                    <ProjectCard project={project} />
-                  </div>
-                ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+                {[...colorGroups].sort((a, b) => a.order - b.order).map((group) => {
+                  const groupProjects = projects
+                    .filter((p) => p.color === group.color)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                  if (groupProjects.length === 0) return null
+                  const isCollapsed = collapsedGroups.has(group.color)
+                  const sortedGroups = [...colorGroups].sort((a, b) => a.order - b.order)
+                  const groupIdx = sortedGroups.findIndex((g) => g.color === group.color)
+                  const isFirst = groupIdx === 0
+                  const isLast = groupIdx === sortedGroups.length - 1
+                  const arrowBtnStyle = (disabled: boolean): React.CSSProperties => ({
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 20, height: 20, borderRadius: 4,
+                    border: 'none', background: 'transparent', padding: 0,
+                    color: disabled ? 'var(--color-border)' : 'var(--color-mute)',
+                    cursor: disabled ? 'default' : 'pointer', flexShrink: 0,
+                    transition: 'color 100ms ease',
+                  })
+                  return (
+                    <div key={group.color}>
+                      {/* Group header */}
+                      <div
+                        className="flex items-center gap-2"
+                        style={{ marginBottom: 12, userSelect: 'none' }}
+                      >
+                        {/* Collapse chevron — left side */}
+                        <button
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 20, height: 20, borderRadius: 4,
+                            border: 'none', background: 'transparent', padding: 0,
+                            color: 'var(--color-mute)', cursor: 'pointer', flexShrink: 0,
+                            transition: 'color 100ms ease',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-ink)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-mute)')}
+                          onClick={() => setCollapsedGroups((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(group.color)) next.delete(group.color)
+                            else next.add(group.color)
+                            return next
+                          })}
+                        >
+                          <svg
+                            width="10" height="10" viewBox="0 0 10 10"
+                            fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
+                            style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }}
+                          >
+                            <path d="M2 3.5 5 6.5 8 3.5" />
+                          </svg>
+                        </button>
+                        {/* Colored dot */}
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: group.color, flexShrink: 0 }} />
+                        {/* Name or rename input */}
+                        {renamingGroup === group.color ? (
+                          <input
+                            autoFocus
+                            value={renameGroupValue}
+                            onChange={(e) => setRenameGroupValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); handleRenameGroup(group.color, renameGroupValue) }
+                              if (e.key === 'Escape') { setRenamingGroup(null); setRenameGroupValue('') }
+                            }}
+                            className="sidebar-input"
+                            style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-ink)', padding: 0, width: 160 }}
+                          />
+                        ) : (
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-ink)', letterSpacing: '-0.01em', opacity: 0.45 }}>
+                            {group.name}
+                          </span>
+                        )}
+                        <span style={{
+                          fontSize: 10, fontFamily: '"Geist Mono", monospace', fontWeight: 500,
+                          background: 'var(--color-panel2)', border: '1px solid var(--color-border)',
+                          borderRadius: 99, padding: '1px 6px', color: 'var(--color-mute)', lineHeight: 1.6,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}>{groupProjects.length}</span>
+                        {/* Right controls */}
+                        <div className="flex items-center" style={{ marginLeft: 'auto', gap: 2 }}>
+                          {/* Three-dot menu */}
+                          <button
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              width: 20, height: 20, borderRadius: 4,
+                              border: 'none', background: 'transparent', padding: 0,
+                              color: 'var(--color-mute)', cursor: 'pointer', flexShrink: 0,
+                              transition: 'color 100ms ease',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-ink)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-mute)')}
+                            onClick={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              setGroupMenu({ color: group.color, x: rect.left, y: rect.bottom + 4 })
+                            }}
+                            title="Group options"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                              <circle cx="2" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="14" cy="8" r="1.5" />
+                            </svg>
+                          </button>
+                          {/* Up arrow */}
+                          <button
+                            style={arrowBtnStyle(isFirst)}
+                            disabled={isFirst}
+                            onMouseEnter={(e) => { if (!isFirst) (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+                            onMouseLeave={(e) => { if (!isFirst) (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+                            onClick={() => handleReorderGroup(group.color, 'up')}
+                            title="Move group up"
+                          >
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                              <path d="M2 6.5 5 3.5 8 6.5" />
+                            </svg>
+                          </button>
+                          {/* Down arrow */}
+                          <button
+                            style={arrowBtnStyle(isLast)}
+                            disabled={isLast}
+                            onMouseEnter={(e) => { if (!isLast) (e.currentTarget as HTMLElement).style.color = 'var(--color-ink)' }}
+                            onMouseLeave={(e) => { if (!isLast) (e.currentTarget as HTMLElement).style.color = 'var(--color-mute)' }}
+                            onClick={() => handleReorderGroup(group.color, 'down')}
+                            title="Move group down"
+                          >
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                              <path d="M2 3.5 5 6.5 8 3.5" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      {/* Projects grid */}
+                      {!isCollapsed && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+                          {groupProjects.map((project, index) => (
+                            <div
+                              key={project.id}
+                              style={{ animation: 'sidebar-fade-in 200ms ease both', animationDelay: `${index * 60}ms` }}
+                            >
+                              <ProjectCard project={project} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -282,6 +479,47 @@ export default function Dashboard() {
       {showNewProject && (
         <NewProjectModal onClose={() => setShowNewProject(false)} />
       )}
+
+      {/* Color group three-dot menu portal */}
+      <AnimatePresence>
+      {groupMenu && (() => {
+        const rowStyle: React.CSSProperties = {
+          padding: '8px 12px', cursor: 'pointer', fontSize: 13,
+          color: 'var(--color-ink)', transition: 'background 80ms ease',
+        }
+        return createPortal(
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed', top: groupMenu.y, left: groupMenu.x,
+              zIndex: 9999, width: 140,
+              background: 'var(--color-panel)', border: '1px solid var(--color-border)',
+              borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={rowStyle}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              onClick={() => {
+                const g = colorGroups.find((g) => g.color === groupMenu.color)
+                setRenameGroupValue(g?.name ?? '')
+                setRenamingGroup(groupMenu.color)
+                setGroupMenu(null)
+              }}
+            >
+              Rename
+            </div>
+          </motion.div>,
+          document.body
+        )
+      })()}
+      </AnimatePresence>
 
     </div>
   )

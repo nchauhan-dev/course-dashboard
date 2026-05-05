@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useApp } from '../store/AppContext'
 import { api } from '../lib/api'
 import type { Assignment, Submission } from '../../../../types/index'
@@ -159,7 +160,7 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
       <div
         className="relative flex flex-col overflow-hidden rounded-xl shadow-2xl"
         style={{
-          width: 700, maxWidth: '95vw', maxHeight: '80vh',
+          width: 820, maxWidth: '96vw', maxHeight: '82vh',
           background: 'var(--color-panel)',
           border: '1px solid var(--color-border)',
         }}
@@ -201,7 +202,7 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
             {/* Header */}
             <div
               className="flex-shrink-0 px-6 pt-5 pb-4"
-              style={{ borderBottom: '1px solid var(--color-border)', borderTop: `3px solid ${project.color}` }}
+              style={{ borderBottom: '1px solid var(--color-border)' }}
             >
               <div className="flex items-start justify-between gap-10 pr-8">
                 <div className="min-w-0 flex-1">
@@ -253,7 +254,7 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
                 )})()}
               </div>
 
-              {isEditing ? (
+              {isEditing && (
                 <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: 'var(--color-mute)', marginBottom: 4 }}>Due date &amp; time</label>
@@ -290,54 +291,152 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
                     </button>
                   </div>
                 </div>
-              ) : (
-                due && (
-                  <div className="mt-2 flex flex-wrap gap-4" style={{ fontSize: 12.5, color: 'var(--color-mute)' }}>
-                    <span>
-                      Due:{' '}
-                      <span style={{ fontWeight: 500, color: isOverdue && !hasSubmission ? 'var(--color-danger)' : 'var(--color-ink)' }}>
-                        {due.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                      </span>
-                    </span>
-                    {assignment.points > 0 && (
-                      <span>Points: <span style={{ fontWeight: 500, color: 'var(--color-ink)' }}>{assignment.points}</span></span>
-                    )}
-                    {!isOverdue && (
-                      <span>
-                        Time left:{' '}
-                        <span style={{ fontWeight: 500, color: daysLeft <= 2 ? 'var(--color-danger)' : 'var(--color-ink)' }}>
-                          {daysLeft === 0 ? 'Due today' : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                )
               )}
             </div>
 
-            {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto">
-              <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Scrollable body — two columns */}
+            <div className="flex-1 overflow-hidden" style={{ display: 'flex', minHeight: 0, borderTop: '1px solid var(--color-border-s)' }}>
 
-                {/* Description */}
-                {assignment.description && (
-                  <div className="card p-4">
-                    <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink2)', marginBottom: 6 }}>Description</h3>
-                    <p style={{ fontSize: 13, color: 'var(--color-ink2)', whiteSpace: 'pre-wrap', margin: 0 }}>{assignment.description}</p>
-                  </div>
-                )}
+              {/* ── Left column: details ── */}
+              <div
+                className="no-scrollbar"
+                style={{
+                  flex: '0 0 44%', overflowY: 'auto',
+                  padding: '20px 20px 24px 24px',
+                  display: 'flex', flexDirection: 'column', gap: 20,
+                  borderRight: '1px solid var(--color-border-s)',
+                }}
+              >
+                {/* Description — always shown */}
+                <div>
+                  <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-mute)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Description</p>
+                  {assignment.description ? (
+                    <p style={{ fontSize: 12.5, color: 'var(--color-ink2)', whiteSpace: 'pre-wrap', margin: 0, lineHeight: 1.6 }}>{assignment.description}</p>
+                  ) : (
+                    <p style={{ fontSize: 12.5, color: 'var(--color-mute)', fontStyle: 'italic', margin: 0 }}>No description provided.</p>
+                  )}
+                </div>
 
                 {/* Instructions */}
                 {assignment.instructions && (
-                  <div className="card p-4">
-                    <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink2)', marginBottom: 6 }}>Instructions</h3>
-                    <p style={{ fontSize: 13, color: 'var(--color-ink2)', whiteSpace: 'pre-wrap', margin: 0 }}>{assignment.instructions}</p>
+                  <div>
+                    <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-mute)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Instructions</p>
+                    <p style={{ fontSize: 12.5, color: 'var(--color-ink2)', whiteSpace: 'pre-wrap', margin: 0, lineHeight: 1.6 }}>{assignment.instructions}</p>
                   </div>
                 )}
 
-                {/* Upload */}
-                <div className="card p-4">
-                  <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink2)', marginBottom: 10 }}>Upload Submission</h3>
+                <div style={{ borderTop: '1px solid var(--color-border-s)' }} />
+
+                {/* Requirements — always shown */}
+                <div>
+                  <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-mute)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Requirements</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {[
+                      'PDF, DOC, DOCX, JPG, or PNG',
+                      '50 MB maximum file size',
+                      'Text must be clearly visible',
+                      'One file per submission',
+                    ].map((req) => (
+                      <div key={req} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                          style={{ color: 'var(--color-mute)', flexShrink: 0, marginTop: 1 }}>
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="9 12 11 14 15 10" />
+                        </svg>
+                        <span style={{ fontSize: 12.5, color: 'var(--color-ink2)', lineHeight: 1.5 }}>{req}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--color-border-s)' }} />
+
+                {/* Assignment Info */}
+                <div>
+                  <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-mute)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Assignment Info</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {due && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                          style={{ color: 'var(--color-mute)', flexShrink: 0 }}>
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                        <span style={{ fontSize: 12, color: 'var(--color-mute)', width: 52, flexShrink: 0 }}>Due</span>
+                        <div>
+                          <span style={{ fontSize: 12.5, fontWeight: 500, color: isOverdue && !hasSubmission ? 'var(--color-danger)' : 'var(--color-ink)' }}>
+                            {due.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                          </span>
+                          {!isOverdue && (
+                            <span style={{ fontSize: 11.5, color: daysLeft <= 2 ? 'var(--color-danger)' : 'var(--color-mute)', marginLeft: 6 }}>
+                              ({daysLeft === 0 ? 'today' : `${daysLeft}d left`})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {assignment.points > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                          style={{ color: 'var(--color-mute)', flexShrink: 0 }}>
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                        <span style={{ fontSize: 12, color: 'var(--color-mute)', width: 52, flexShrink: 0 }}>Points</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--color-ink)' }}>{assignment.points}</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                        style={{ color: 'var(--color-mute)', flexShrink: 0 }}>
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                        <line x1="7" y1="7" x2="7.01" y2="7" />
+                      </svg>
+                      <span style={{ fontSize: 12, color: 'var(--color-mute)', width: 52, flexShrink: 0 }}>Project</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--color-ink)' }}>{project.name}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Right column: submissions + upload ── */}
+              <div
+                style={{
+                  flex: 1,
+                  padding: '20px 24px 24px 20px',
+                  display: 'flex', flexDirection: 'column',
+                  minHeight: 0,
+                }}
+              >
+                <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-mute)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10, flexShrink: 0 }}>Submissions</p>
+
+                {/* Top — submissions list, scrollable */}
+                <div
+                  className="no-scrollbar"
+                  style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}
+                >
+                  {assignment.submissions.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {assignment.submissions.map((sub) => (
+                        <SubmissionCard
+                          key={sub.id}
+                          submission={sub}
+                          assignmentPath={assignment.path}
+                          onDelete={() => handleDeleteSubmission(sub)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 8 }}>
+                      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}
+                        style={{ color: 'var(--color-mute)' }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      <p style={{ fontSize: 12.5, color: 'var(--color-mute)', margin: 0 }}>No submissions yet</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom — upload form, pinned */}
+                <div style={{ flexShrink: 0, paddingTop: 12 }}>
                   <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <input
                       ref={fileInputRef}
@@ -404,40 +503,32 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
                     {submitError && (
                       <div className="rounded-lg p-3 text-sm" style={{ background: 'var(--color-danger-soft)', color: 'var(--color-danger)' }}>{submitError}</div>
                     )}
-
-                    <button
-                      type="submit"
-                      disabled={isSubmitting || selectedFiles.length === 0}
-                      className="btn-primary disabled:opacity-50"
-                      style={{ alignSelf: 'flex-start' }}
-                    >
-                      {isSubmitting ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      ) : 'Submit'}
-                    </button>
                   </form>
                 </div>
-
-                {/* Submission history */}
-                {assignment.submissions.length > 0 && (
-                  <div>
-                    <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-ink2)', marginBottom: 10 }}>
-                      Submissions ({assignment.submissions.length})
-                    </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {assignment.submissions.map((sub) => (
-                        <SubmissionCard
-                          key={sub.id}
-                          submission={sub}
-                          assignmentPath={assignment.path}
-                          onDelete={() => handleDeleteSubmission(sub)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
               </div>
+
+            </div>
+
+            {/* Footer */}
+            <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 24px', borderTop: '1px solid var(--color-border-s)' }}>
+              <button
+                onClick={onClose}
+                className="btn-secondary"
+                style={{ fontSize: 13, padding: '6px 16px' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit as unknown as React.MouseEventHandler<HTMLButtonElement>}
+                disabled={isSubmitting || selectedFiles.length === 0}
+                className="btn-primary disabled:opacity-50"
+                style={{ fontSize: 13, padding: '6px 16px' }}
+              >
+                {isSubmitting ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : 'Submit'}
+              </button>
             </div>
           </>
         )}
@@ -454,8 +545,20 @@ function SubmissionCard({ submission, assignmentPath, onDelete }: {
   onDelete: () => void
 }) {
   const submissionsDir = `${assignmentPath}/submissions`
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const ts = new Date(submission.submission_timestamp)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [confirming, setConfirming] = useState(false)
+
+  // Close on outside click
+  useEffect(() => {
+    if (!menu) return
+    function onMouseDown(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-submission-menu]')) { setMenu(null); setConfirming(false) }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [menu])
 
   return (
     <div className="card p-4">
@@ -511,45 +614,88 @@ function SubmissionCard({ submission, assignmentPath, onDelete }: {
         </div>
 
         <div className="flex-shrink-0">
-          {confirmDelete ? (
-            <div className="flex gap-2">
-              <button onClick={onDelete}
-                style={{ borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 500, background: 'var(--color-danger)', color: 'white', border: 'none', cursor: 'pointer',
-                  transition: 'filter 120ms ease, transform 120ms ease' }}
-                onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.1)')}
-                onMouseLeave={e => (e.currentTarget.style.filter = '')}
-                onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.95)')}
-                onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-              >Delete</button>
-              <button onClick={() => setConfirmDelete(false)}
-                style={{ borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 500, background: 'var(--color-panel2)', border: '1px solid var(--color-border)', color: 'var(--color-ink2)', cursor: 'pointer',
-                  transition: 'background-color 120ms ease, transform 120ms ease' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-panel2)')}
-                onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.95)')}
-                onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-              >Cancel</button>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmDelete(true)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: 28, height: 28, borderRadius: 6, border: 'none', cursor: 'pointer',
-                color: 'var(--color-mute)', background: 'transparent',
-                transition: 'color 120ms ease, transform 120ms ease',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-danger)')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-mute)')}
-              onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.88)')}
-              onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-              title="Delete submission">
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          )}
+          <button
+            onMouseDown={(e) => {
+              e.stopPropagation()
+              setMenu(menu ? null : { x: e.clientX, y: e.clientY })
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 28, height: 28, borderRadius: 6, border: 'none', cursor: 'pointer',
+              color: 'var(--color-mute)', background: 'transparent',
+              transition: 'color 120ms ease, transform 120ms ease',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-danger)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-mute)')}
+            onMouseDown={e => { e.stopPropagation(); e.currentTarget.style.transform = 'scale(0.88)'; setMenu(menu ? null : { x: e.clientX, y: e.clientY }) }}
+            onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+            title="Delete submission"
+          >
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         </div>
       </div>
+
+      {menu && createPortal(
+        <div
+          data-submission-menu
+          style={{
+            position: 'fixed', top: menu.y, left: menu.x, zIndex: 9999,
+            background: 'var(--color-panel)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 8,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+            padding: '4px',
+            minWidth: 120,
+          }}
+        >
+          {confirming ? (
+            <button
+              data-submission-menu
+              onClick={() => { onDelete(); setMenu(null); setConfirming(false) }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium"
+              style={{ color: 'var(--color-danger)', background: 'none', border: 'none', cursor: 'pointer', borderRadius: 5 }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-danger-soft)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              </svg>
+              Confirm delete
+            </button>
+          ) : (
+            <button
+              data-submission-menu
+              onClick={() => setConfirming(true)}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"
+              style={{ color: 'var(--color-ink2)', background: 'none', border: 'none', cursor: 'pointer', borderRadius: 5 }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-mute)' }}>
+                <path d="M3 6h18m-2 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+              Delete
+            </button>
+          )}
+          <button
+            data-submission-menu
+            onMouseDown={(e) => { e.stopPropagation(); setMenu(null); setConfirming(false) }}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '7px 12px', fontSize: 13, borderRadius: 5,
+              color: 'var(--color-ink2)', background: 'none', border: 'none', cursor: 'pointer',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+          >
+            Cancel
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

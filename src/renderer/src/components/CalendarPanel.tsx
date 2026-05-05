@@ -237,7 +237,7 @@ export default function CalendarPanel({
 
     {/* Scrollable upcoming groups */}
     <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingTop: 16, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-      <UpcomingGroup label="Completed" tone="success" events={completedEvents}  projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
+      {projectId && <UpcomingGroup label="Completed" tone="success" events={completedEvents}  projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />}
       <UpcomingGroup label="Overdue"   tone="danger"  events={grouped.overdue}  projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
       <UpcomingGroup label="Today"     tone="today"   events={grouped.dueToday} projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />
       <UpcomingGroup label="Later"     tone="mute"    events={grouped.later}    projectId={projectId} navigate={navigate} onSelectAssignment={onSelectAssignment} />

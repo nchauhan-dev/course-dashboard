@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
 import { api } from '../lib/api'
+import { PRESET_COLORS } from '../lib/constants'
 import FileTree from './FileTree'
 import NewProjectModal from './NewProjectModal'
 import SettingsModal from './SettingsModal'
@@ -46,6 +47,7 @@ export default function NewSidebar() {
   const [renamingProject, setRenamingProject] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<string | null>(null)
+  const [colorPickerOpen, setColorPickerOpen] = useState(false)
   const projectMenuRef = useRef<HTMLDivElement>(null)
 
   // User / footer
@@ -108,6 +110,7 @@ export default function NewSidebar() {
       if (!projectMenuRef.current?.contains(e.target as Node)) {
         setOpenMenuProject(null)
         setConfirmDeleteProject(null)
+        setColorPickerOpen(false)
       }
     }
     document.addEventListener('mousedown', onMouseDown)
@@ -145,8 +148,15 @@ export default function NewSidebar() {
     await refreshProjects()
   }
 
+  async function handleUpdateProjectColor(projectPath: string, color: string) {
+    await api.updateProjectColor(projectPath, color)
+    await refreshProjects()
+    setOpenMenuProject(null)
+    setColorPickerOpen(false)
+  }
+
   async function handleDeleteProject(id: string, projectPath: string) {
-    await api.deleteProject(projectPath)
+    await api.deleteFolder({ folderPath: projectPath })
     removeProject(id)
     setOpenMenuProject(null)
     setConfirmDeleteProject(null)
@@ -495,12 +505,19 @@ export default function NewSidebar() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {projects.map((project, index) => {
+                  {[...projects].sort((a, b) => {
+                    if (a.color !== b.color) return a.color.localeCompare(b.color)
+                    return a.name.localeCompare(b.name)
+                  }).map((project, index, arr) => {
                     const isHov = hoveredProject === project.id
                     const isRenaming = renamingProject === project.id
+                    const showDivider = index > 0 && arr[index - 1].color !== project.color
                     return (
+                      <div key={project.id}>
+                      {showDivider && (
+                        <div style={{ height: 1, background: 'var(--color-border-s)', margin: '4px 8px' }} />
+                      )}
                       <div
-                        key={project.id}
                         onClick={() => !isRenaming && navigate(`/project/${project.id}`)}
                         onMouseEnter={() => setHoveredProject(project.id)}
                         onMouseLeave={() => setHoveredProject(null)}
@@ -552,6 +569,7 @@ export default function NewSidebar() {
                             </svg>
                           </button>
                         )}
+                      </div>
                       </div>
                     )
                   })}
@@ -685,6 +703,39 @@ export default function NewSidebar() {
               </svg>
               Rename
             </button>
+            <button
+              onClick={() => setColorPickerOpen((v) => !v)}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"
+              style={{ color: 'var(--color-ink2)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <div style={{ width: 12, height: 12, borderRadius: '50%', background: project.color, flexShrink: 0 }} />
+              Change Color
+            </button>
+            {colorPickerOpen && (
+              <div style={{ padding: '6px 10px 8px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                {PRESET_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => handleUpdateProjectColor(project.path, c)}
+                    title={c}
+                    style={{
+                      width: 20, height: 20, borderRadius: '50%', background: c,
+                      border: c === project.color ? '2px solid var(--color-ink)' : '2px solid transparent',
+                      cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    {c === project.color && (
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
             {isConfirming ? (
               <button
                 onClick={() => handleDeleteProject(project.id, project.path)}

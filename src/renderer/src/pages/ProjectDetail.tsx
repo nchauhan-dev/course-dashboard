@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useParams } from 'react-router-dom'
 import { useApp } from '../store/AppContext'
 import { api } from '../lib/api'
@@ -420,7 +421,6 @@ export default function ProjectDetail() {
             key={fileTreeKey}
             rootPath={project.path}
             naked
-            exclude={['Assignments']}
             onStatsReady={(files, bytes) => setTreeStats({ files, bytes })}
           />
         </div>
@@ -973,6 +973,7 @@ export default function ProjectDetail() {
       </main>
 
       {/* Link context menu portal */}
+      <AnimatePresence>
       {openLinkMenu && (() => {
         const menuLink = (links?.links ?? []).find(l => l.id === openLinkMenu.linkId)
         if (!menuLink) return null
@@ -983,7 +984,11 @@ export default function ProjectDetail() {
         // All categories the link could be moved to (exclude current)
         const moveTargets = ['Uncategorized', ...(links?.categories ?? [])].filter(c => c !== (menuLink.category || 'Uncategorized'))
         return createPortal(
-          <div
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
               position: 'fixed', top: openLinkMenu.y, left: openLinkMenu.x,
@@ -1067,12 +1072,14 @@ export default function ProjectDetail() {
             >
               Delete
             </div>
-          </div>,
+          </motion.div>,
           document.body
         )
       })()}
+      </AnimatePresence>
 
       {/* Sort dropdown portal */}
+      <AnimatePresence>
       {sortMenuOpen && (() => {
         const rect = sortBtnRef.current?.getBoundingClientRect()
         if (!rect) return null
@@ -1089,7 +1096,11 @@ export default function ProjectDetail() {
           transition: 'background 80ms ease',
         }
         return createPortal(
-          <div
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
@@ -1120,19 +1131,25 @@ export default function ProjectDetail() {
                 )}
               </div>
             ))}
-          </div>,
+          </motion.div>,
           document.body
         )
       })()}
+      </AnimatePresence>
 
       {/* Category three-dot menu portal */}
+      <AnimatePresence>
       {categoryMenu && (() => {
         const rowStyle: React.CSSProperties = {
           padding: '8px 12px', cursor: 'pointer', fontSize: 13,
           color: 'var(--color-ink)', transition: 'background 80ms ease',
         }
         return createPortal(
-          <div
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
               position: 'fixed', top: categoryMenu.y, left: categoryMenu.x,
@@ -1165,10 +1182,11 @@ export default function ProjectDetail() {
             >
               Delete
             </div>
-          </div>,
+          </motion.div>,
           document.body
         )
       })()}
+      </AnimatePresence>
 
       </div>{/* end columns */}
 

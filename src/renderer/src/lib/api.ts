@@ -10,7 +10,8 @@ import type {
   SubmitFilesParams,
   IpcResult,
   ProjectLink,
-  LinksFile
+  LinksFile,
+  ColorGroup
 } from '../../../types/index'
 
 declare global {
@@ -27,6 +28,7 @@ declare global {
 
       getProjects: (rootPath: string) => Promise<IpcResult<Project[]>>
       createProject: (params: CreateProjectParams) => Promise<IpcResult<Project>>
+      updateProjectColor: (projectPath: string, color: string) => Promise<IpcResult<void>>
       deleteProject: (projectPath: string) => Promise<IpcResult<void>>
 
       getAssignments: (
@@ -73,6 +75,11 @@ declare global {
       renameCategory: (projectPath: string, oldName: string, newName: string) => Promise<IpcResult<void>>
       moveLink: (projectPath: string, linkId: string, category: string) => Promise<IpcResult<void>>
       openExternal: (url: string) => Promise<void>
+
+      getColorGroups: (rootPath: string, workspace: string) => Promise<IpcResult<ColorGroup[]>>
+      saveColorGroups: (rootPath: string, workspace: string, colorGroups: ColorGroup[]) => Promise<IpcResult<void>>
+      renameColorGroup: (rootPath: string, workspace: string, color: string, name: string) => Promise<IpcResult<void>>
+      reorderColorGroups: (rootPath: string, workspace: string, colorGroups: ColorGroup[]) => Promise<IpcResult<void>>
     }
   }
 }
@@ -89,6 +96,7 @@ export const api = {
 
   getProjects: (rootPath: string) => window.api.getProjects(rootPath),
   createProject: (params: CreateProjectParams) => window.api.createProject(params),
+  updateProjectColor: (projectPath: string, color: string) => window.api.updateProjectColor(projectPath, color),
   deleteProject: (projectPath: string) => window.api.deleteProject(projectPath),
 
   getAssignments: (projectId: string, projectPath: string, projectName: string, projectColor: string) =>
@@ -130,5 +138,10 @@ export const api = {
   reorderCategories: (projectPath: string, categories: string[]): Promise<IpcResult<void>> => window.api.reorderCategories(projectPath, categories),
   renameCategory: (projectPath: string, oldName: string, newName: string): Promise<IpcResult<void>> => window.api.renameCategory(projectPath, oldName, newName),
   moveLink: (projectPath: string, linkId: string, category: string): Promise<IpcResult<void>> => window.api.moveLink(projectPath, linkId, category),
-  openExternal: (url: string): Promise<void> => window.api.openExternal(url)
+  openExternal: (url: string): Promise<void> => window.api.openExternal(url),
+
+  getColorGroups: (rootPath: string, workspace: string): Promise<IpcResult<ColorGroup[]>> => window.api.getColorGroups(rootPath, workspace),
+  saveColorGroups: (rootPath: string, workspace: string, colorGroups: ColorGroup[]): Promise<IpcResult<void>> => window.api.saveColorGroups(rootPath, workspace, colorGroups),
+  renameColorGroup: (rootPath: string, workspace: string, color: string, name: string): Promise<IpcResult<void>> => window.api.renameColorGroup(rootPath, workspace, color, name),
+  reorderColorGroups: (rootPath: string, workspace: string, colorGroups: ColorGroup[]): Promise<IpcResult<void>> => window.api.reorderColorGroups(rootPath, workspace, colorGroups)
 }

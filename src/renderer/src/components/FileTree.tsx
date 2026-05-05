@@ -175,7 +175,7 @@ function TreeNodeRow({
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
   const [isRenaming, setIsRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState('')
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const dragCounter = useRef(0)
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -192,6 +192,7 @@ function TreeNodeRow({
       ) {
         setMenuOpen(false)
         setMenuPos(null)
+        setConfirmingDelete(false)
       }
     }
     document.addEventListener('mousedown', handleMouseDown)
@@ -356,55 +357,6 @@ function TreeNodeRow({
     )
   }
 
-  // ── Delete confirm mode ───────────────────────────────────────────────────────
-  if (isDeleting) {
-    return (
-      <div>
-        <div
-          className="flex items-center gap-2 border-b border-gray-100 bg-red-50 pr-3"
-          style={{ height: 40, paddingLeft: `${indent}px` }}
-        >
-          <div className="h-5 w-5 flex-shrink-0" />
-          {node.isDirectory ? (
-            <svg className="h-5 w-5 flex-shrink-0 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-            </svg>
-          ) : (
-            <svg className="h-5 w-5 flex-shrink-0 text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          )}
-          <span className="flex-1 truncate text-sm font-medium text-red-600">{node.name}</span>
-          <span className="flex-shrink-0 text-xs font-medium text-red-500 mr-1">Delete?</span>
-          <button
-            onClick={handleDelete}
-            className="flex-shrink-0 rounded px-2 py-0.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600"
-          >
-            Delete
-          </button>
-          <button
-            onClick={() => setIsDeleting(false)}
-            className="flex-shrink-0 rounded px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
-          >
-            Cancel
-          </button>
-        </div>
-        {node.isDirectory && isExpanded && (
-          <div>
-            {(node.children ?? []).map((child) => (
-              <TreeNodeRow
-                key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} naked={naked}
-                isExpanded={expandedPaths.has(child.path)}
-                onToggleExpand={onToggleExpand}
-                expandedPaths={expandedPaths}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div
       style={depth === 0 && animationIndex !== undefined ? {
@@ -506,14 +458,33 @@ function TreeNodeRow({
                     >
                       Rename
                     </button>
-                    <button
-                      onClick={() => { setMenuOpen(false); setMenuPos(null); setIsDeleting(true) }}
-                      style={{ display: 'block', width: '100%', padding: '7px 12px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-                    >
-                      Delete
-                    </button>
+                    {confirmingDelete ? (
+                      <button
+                        onClick={() => { handleDelete(); setMenuOpen(false); setMenuPos(null); setConfirmingDelete(false) }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', borderRadius: 5 }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-danger-soft)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        </svg>
+                        Confirm delete
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmingDelete(true)}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-ink2)', borderRadius: 5 }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-mute)' }}>
+                          <path d="M3 6h18m-2 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
+                        Delete
+                      </button>
+                    )}
                   </div>,
                   document.body
                 )}
@@ -579,14 +550,33 @@ function TreeNodeRow({
                     >
                       Rename
                     </button>
-                    <button
-                      onClick={() => { setMenuOpen(false); setMenuPos(null); setIsDeleting(true) }}
-                      style={{ display: 'block', width: '100%', padding: '7px 12px', textAlign: 'left', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-                    >
-                      Delete
-                    </button>
+                    {confirmingDelete ? (
+                      <button
+                        onClick={() => { handleDelete(); setMenuOpen(false); setMenuPos(null); setConfirmingDelete(false) }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-medium"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', borderRadius: 5 }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-danger-soft)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        </svg>
+                        Confirm delete
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmingDelete(true)}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-ink2)', borderRadius: 5 }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-border-s)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-mute)' }}>
+                          <path d="M3 6h18m-2 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
+                        Delete
+                      </button>
+                    )}
                   </div>,
                   document.body
                 )}

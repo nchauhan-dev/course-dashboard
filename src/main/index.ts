@@ -19,6 +19,7 @@ import type {
   SubmitFilesParams,
   ProjectLink,
   LinksFile,
+  ColorGroup,
   IpcResult
 } from '../../types/index'
 
@@ -718,6 +719,19 @@ ipcMain.handle('fs:create-project', (_e, params: CreateProjectParams): IpcResult
   }
 })
 
+ipcMain.handle('fs:update-project-color', (_e, { projectPath, color }: { projectPath: string; color: string }): IpcResult<void> => {
+  try {
+    const projectMdPath = path.join(projectPath, 'project.md')
+    if (!fs.existsSync(projectMdPath)) return { success: false, error: 'project.md not found' }
+    const parsed = parseMdWithContent(projectMdPath)
+    if (!parsed) return { success: false, error: 'Failed to parse project.md' }
+    writeMd(projectMdPath, { ...parsed.data, color }, parsed.content)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
 ipcMain.handle('fs:delete-project', (_e, projectPath: string): IpcResult<void> => {
   if (!fs.existsSync(projectPath)) return { success: false, error: 'Project path not found' }
   try {
@@ -974,7 +988,7 @@ function readDirRecursive(dirPath: string, skipName?: string): TreeNode[] {
 ipcMain.handle('fs:read-directory', (_e, dirPath: string): IpcResult<TreeNode[]> => {
   if (!fs.existsSync(dirPath)) return { success: false, error: 'Path does not exist' }
   try {
-    return { success: true, data: readDirRecursive(dirPath, 'Assignments') }
+    return { success: true, data: readDirRecursive(dirPath) }
   } catch (e) {
     return { success: false, error: String(e) }
   }
@@ -993,7 +1007,16 @@ ipcMain.handle(
   'fs:rename-folder',
   (_e, { oldPath, newName }: { oldPath: string; newName: string }): IpcResult<void> => {
     try {
-      fs.renameSync(oldPath, path.join(path.dirname(oldPath), newName))
+      const newPath = path.join(path.dirname(oldPath), newName)
+      fs.renameSync(oldPath, newPath)
+
+      // Update name in project.md if it exists
+      const projectMdPath = path.join(newPath, 'project.md')
+      if (fs.existsSync(projectMdPath)) {
+        const parsed = parseMdWithContent(projectMdPath)
+        if (parsed) writeMd(projectMdPath, { ...parsed.data, name: newName }, parsed.content)
+      }
+
       return { success: true }
     } catch (e) {
       return { success: false, error: String(e) }
@@ -1320,6 +1343,64 @@ ipcMain.handle('fs:rename-category', (_e, { projectPath, oldName, newName }: { p
     file.categories = file.categories.map((c) => c === oldName ? newName : c)
     file.links = file.links.map((l) => l.category === oldName ? { ...l, category: newName } : l)
     writeLinksFile(projectPath, file)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+// ── Workspace color groups ────────────────────────────────────────────────────
+
+function workspacePath(rootPath: string, workspace: string): string {
+  return path.join(rootPath, workspace, 'workspace.json')
+}
+
+function readWorkspaceFile(rootPath: string, workspace: string): { colorGroups: ColorGroup[] } {
+  const p = workspacePath(rootPath, workspace)
+  if (!fs.existsSync(p)) return { colorGroups: [] }
+  try {
+    const raw = JSON.parse(fs.readFileSync(p, 'utf-8'))
+    return { colorGroups: raw.colorGroups ?? [] }
+  } catch { return { colorGroups: [] } }
+}
+
+function writeWorkspaceFile(rootPath: string, workspace: string, data: { colorGroups: ColorGroup[] }): void {
+  fs.writeFileSync(workspacePath(rootPath, workspace), JSON.stringify(data, null, 2), 'utf-8')
+}
+
+ipcMain.handle('fs:get-color-groups', (_e, { rootPath, workspace }: { rootPath: string; workspace: string }): IpcResult<ColorGroup[]> => {
+  try {
+    return { success: true, data: readWorkspaceFile(rootPath, workspace).colorGroups }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:save-color-groups', (_e, { rootPath, workspace, colorGroups }: { rootPath: string; workspace: string; colorGroups: ColorGroup[] }): IpcResult<void> => {
+  try {
+    writeWorkspaceFile(rootPath, workspace, { colorGroups })
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:rename-color-group', (_e, { rootPath, workspace, color, name }: { rootPath: string; workspace: string; color: string; name: string }): IpcResult<void> => {
+  try {
+    const data = readWorkspaceFile(rootPath, workspace)
+    data.colorGroups = data.colorGroups.map((g) => g.color === color ? { ...g, name } : g)
+    writeWorkspaceFile(rootPath, workspace, data)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('fs:reorder-color-groups', (_e, { rootPath, workspace, colorGroups }: { rootPath: string; workspace: string; colorGroups: ColorGroup[] }): IpcResult<void> => {
+  try {
+    const data = readWorkspaceFile(rootPath, workspace)
+    data.colorGroups = colorGroups
+    writeWorkspaceFile(rootPath, workspace, data)
     return { success: true }
   } catch (e) {
     return { success: false, error: String(e) }

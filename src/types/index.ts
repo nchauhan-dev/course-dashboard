@@ -110,3 +110,9 @@ export interface LinksFile {
   categories: string[]
   links: ProjectLink[]
 }
+
+export interface ColorGroup {
+  color: string
+  name: string
+  order: number
+}

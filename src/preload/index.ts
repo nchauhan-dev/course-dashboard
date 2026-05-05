@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
 
   getProjects: (rootPath: string) => ipcRenderer.invoke('fs:get-projects', rootPath),
   createProject: (params: unknown) => ipcRenderer.invoke('fs:create-project', params),
+  updateProjectColor: (projectPath: string, color: string) => ipcRenderer.invoke('fs:update-project-color', { projectPath, color }),
   deleteProject: (projectPath: string) => ipcRenderer.invoke('fs:delete-project', projectPath),
 
   getAssignments: (projectId: string, projectPath: string, projectName: string, projectColor: string) =>
@@ -59,5 +60,10 @@ contextBridge.exposeInMainWorld('api', {
   reorderCategories: (projectPath: string, categories: string[]) => ipcRenderer.invoke('fs:reorder-categories', { projectPath, categories }),
   renameCategory: (projectPath: string, oldName: string, newName: string) => ipcRenderer.invoke('fs:rename-category', { projectPath, oldName, newName }),
   moveLink: (projectPath: string, linkId: string, category: string) => ipcRenderer.invoke('fs:move-link', { projectPath, linkId, category }),
-  openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url)
+  openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
+
+  getColorGroups: (rootPath: string, workspace: string) => ipcRenderer.invoke('fs:get-color-groups', { rootPath, workspace }),
+  saveColorGroups: (rootPath: string, workspace: string, colorGroups: unknown[]) => ipcRenderer.invoke('fs:save-color-groups', { rootPath, workspace, colorGroups }),
+  renameColorGroup: (rootPath: string, workspace: string, color: string, name: string) => ipcRenderer.invoke('fs:rename-color-group', { rootPath, workspace, color, name }),
+  reorderColorGroups: (rootPath: string, workspace: string, colorGroups: unknown[]) => ipcRenderer.invoke('fs:reorder-color-groups', { rootPath, workspace, colorGroups })
 })
