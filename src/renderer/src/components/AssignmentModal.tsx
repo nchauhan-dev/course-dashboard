@@ -329,13 +329,13 @@ export default function AssignmentModal({ projectId, assignmentId, onClose }: Pr
 
                 {/* Requirements — always shown */}
                 <div>
-                  <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-mute)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Requirements</p>
+                  <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-mute)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Submission Guidelines</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {[
-                      'PDF, DOC, DOCX, JPG, or PNG',
-                      '50 MB maximum file size',
-                      'Text must be clearly visible',
-                      'One file per submission',
+                      'Upload file(s) for completed work',
+                      'Submission reflects assignment outcome',
+                      'Note context and important details',
+                      'Include relevant supporting materials',
                     ].map((req) => (
                       <div key={req} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"

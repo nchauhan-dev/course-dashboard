@@ -267,7 +267,7 @@ export default function ProjectDetail() {
   // Close link context menu on outside click
   useEffect(() => {
     if (!openLinkMenu) return
-    const handler = () => { setOpenLinkMenu(null); setMoveSubmenuOpen(false) }
+    const handler = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('[data-link-menu]')) { setOpenLinkMenu(null); setMoveSubmenuOpen(false) } }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [openLinkMenu])
@@ -678,7 +678,8 @@ export default function ProjectDetail() {
                 return (
                   <div
                     key={link.id}
-                    onClick={(e) => { setMoveSubmenuOpen(false); setOpenLinkMenu({ linkId: link.id, x: e.clientX, y: e.clientY }) }}
+                    onClick={() => api.openExternal(link.url)}
+                    onContextMenu={(e) => { e.preventDefault(); setMoveSubmenuOpen(false); setOpenLinkMenu({ linkId: link.id, x: e.clientX, y: e.clientY }) }}
                     style={{
                       background: 'var(--color-panel)', border: '1px solid var(--color-border)',
                       borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
@@ -973,7 +974,6 @@ export default function ProjectDetail() {
       </main>
 
       {/* Link context menu portal */}
-      <AnimatePresence>
       {openLinkMenu && (() => {
         const menuLink = (links?.links ?? []).find(l => l.id === openLinkMenu.linkId)
         if (!menuLink) return null
@@ -982,16 +982,22 @@ export default function ProjectDetail() {
           color: 'var(--color-ink)', transition: 'background 80ms ease',
         }
         // All categories the link could be moved to (exclude current)
+        const LINK_MENU_HEIGHT = 190
         const moveTargets = ['Uncategorized', ...(links?.categories ?? [])].filter(c => c !== (menuLink.category || 'Uncategorized'))
+        const isFlipped = openLinkMenu.y + LINK_MENU_HEIGHT > window.innerHeight - 16
         return createPortal(
+          <AnimatePresence>
           <motion.div
-            initial={{ opacity: 0, y: -6 }}
+            data-link-menu
+            initial={{ opacity: 0, y: isFlipped ? 6 : -6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
+            exit={{ opacity: 0, y: isFlipped ? 6 : -6 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
-              position: 'fixed', top: openLinkMenu.y, left: openLinkMenu.x,
+              position: 'fixed',
+              top: isFlipped ? openLinkMenu.y - LINK_MENU_HEIGHT : openLinkMenu.y,
+              left: openLinkMenu.x,
               zIndex: 9999, width: 168,
               background: 'var(--color-panel)', border: '1px solid var(--color-border)',
               borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
@@ -999,6 +1005,7 @@ export default function ProjectDetail() {
             }}
           >
             <div
+              data-link-menu
               style={rowStyle}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -1007,6 +1014,7 @@ export default function ProjectDetail() {
               Rename
             </div>
             <div
+              data-link-menu
               style={rowStyle}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -1015,6 +1023,7 @@ export default function ProjectDetail() {
               Open in Browser
             </div>
             <div
+              data-link-menu
               style={rowStyle}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -1026,13 +1035,15 @@ export default function ProjectDetail() {
             {moveTargets.length > 0 && (
               <>
                 <div
+                  data-link-menu
                   style={{ ...rowStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   onClick={() => setMoveSubmenuOpen(o => !o)}
                 >
-                  <span>Move to…</span>
+                  <span data-link-menu>Move to…</span>
                   <svg
+                    data-link-menu
                     width="10" height="10" viewBox="0 0 10 10"
                     fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
                     style={{ color: 'var(--color-mute)', transform: moveSubmenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }}
@@ -1041,9 +1052,10 @@ export default function ProjectDetail() {
                   </svg>
                 </div>
                 {moveSubmenuOpen && (
-                  <div style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-panel2)' }}>
+                  <div data-link-menu style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-panel2)' }}>
                     {moveTargets.map(cat => (
                       <div
+                        data-link-menu
                         key={cat}
                         style={{ ...rowStyle, paddingLeft: 20, fontSize: 12 }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
@@ -1057,8 +1069,9 @@ export default function ProjectDetail() {
                 )}
               </>
             )}
-            <div style={{ height: 1, background: 'var(--color-border)' }} />
+            <div data-link-menu style={{ height: 1, background: 'var(--color-border)' }} />
             <div
+              data-link-menu
               style={{ ...rowStyle, color: 'var(--color-danger)' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border-s)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -1072,11 +1085,11 @@ export default function ProjectDetail() {
             >
               Delete
             </div>
-          </motion.div>,
+          </motion.div>
+          </AnimatePresence>,
           document.body
         )
       })()}
-      </AnimatePresence>
 
       {/* Sort dropdown portal */}
       <AnimatePresence>
